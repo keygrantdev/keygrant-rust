@@ -1,0 +1,78 @@
+name: publish
+
+# A version tag (0.2.0, no "v") tests and packages the keygrant crate, then publishes it to crates.io through
+# crates.io's trusted publishing: the token is short-lived and made for this run, and none is stored
+# anywhere. The build job cannot request an identity token; the publish job, which can, runs no build script
+# (cargo publish --no-verify: the build job's cargo package built this crate from this commit). A version
+# already on crates.io is skipped.
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+-*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      publish: ${{ steps.out.outputs.publish }}
+    defaults:
+      run:
+        working-directory: sdk-rust
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check the tag is the crate's version
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 --locked | sed -n 's/.*"name":"keygrant","version":"\([^"]*\)".*/\1/p')
+          if [ "$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::The tag $GITHUB_REF_NAME is not the version in Cargo.toml ($version)."
+            exit 1
+          fi
+      - name: Check whether crates.io has it already
+        id: out
+        run: |
+          if curl -fsS --max-time 30 https://index.crates.io/ke/yg/keygrant | grep -q "\"vers\":\"$GITHUB_REF_NAME\""; then
+            echo "::notice::keygrant $GITHUB_REF_NAME is already on crates.io: nothing to publish."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Test
+        if: steps.out.outputs.publish == 'true'
+        run: |
+          cargo --version
+          cargo test --locked
+      - name: Package
+        if: steps.out.outputs.publish == 'true'
+        run: cargo package --locked
+
+  publish:
+    needs: build
+    if: needs.build.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+        id: auth
+      - name: Publish to crates.io
+        working-directory: sdk-rust
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: cargo publish --locked --no-verify

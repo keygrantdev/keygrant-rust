@@ -1,0 +1,39 @@
+[package]
+name = "keygrant"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.86"
+description = "KeyGrant licensing for Tauri and native Rust desktop apps: signed leases verified offline, failing in favour of the paying customer."
+license = "MIT"
+homepage = "https://keygrant.dev/docs"
+readme = "README.md"
+# The library, its readme and licence. The tests stay out of the published crate: they read
+# conformance/vectors.json from the repository around it.
+include = ["src/**", "README.md", "LICENSE", "Cargo.toml", "Cargo.lock"]
+keywords = ["licensing", "license", "tauri", "desktop", "ed25519"]
+categories = ["authentication"]
+
+[dependencies]
+ed25519-dalek = "2"
+# The platform's CSPRNG, for a purchase token (already in the tree under ring).
+getrandom = "0.2"
+serde = { version = "1", features = ["derive"] }
+# Numbers read correctly rounded (the nearest double), as JavaScript reads them: the default reader
+# can land one double off, and an entitlement number must be the same double here as in every other
+# KeyGrant SDK.
+serde_json = { version = "1", features = ["float_roundtrip"] }
+sha2 = "0.10"
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+
+[target.'cfg(not(windows))'.dependencies]
+# gethostname(), as Node's os.hostname() reads it off Windows.
+hostname = "0.4"
+
+[target.'cfg(windows)'.dependencies]
+# The host name as Node's os.hostname() reads it on Windows (GetHostNameW):
+# GetComputerNameExW(ComputerNameDnsHostname), through a safe call.
+whoami = { version = "2", default-features = false, features = ["std"] }
+winreg = "0.55"
+
+[dev-dependencies]
+tempfile = "3"
