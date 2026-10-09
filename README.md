@@ -21,8 +21,8 @@ The tests reproduce `conformance/vectors.json`, the behaviour every KeyGrant SDK
 
 ## Releases
 
-Each release is a version tag (`0.2.0`). The tag runs `.github/workflows/publish.yml`, which tests and
-packages the crate and publishes it to crates.io through crates.io's trusted publishing.
+Each release is a version tag (`0.2.1`). The tag runs `.github/workflows/publish.yml`, which packages
+the crate and publishes it to crates.io through crates.io's trusted publishing.
 
 ## License
 
