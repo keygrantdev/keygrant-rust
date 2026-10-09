@@ -11,7 +11,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use common::*;
-use keygrant::lease::{verify_lease, PublicKey, VerifyFailure, VerifyResult};
+use keygrant::lease::{verify_lease, KeySet, VerifyFailure, VerifyResult};
 use keygrant::machine_id::{ACTIVATE_MACHINE_ID_TIMEOUT, MACHINE_ID_TIMEOUT};
 use keygrant::pickup::{purchase_reference, CLAIM_EAGER_MS, CLAIM_WAIT_MS, PURCHASE_TOKEN_MS};
 use keygrant::{
@@ -286,6 +286,7 @@ fn saves_a_bought_key_exactly_as_activate_does_clears_the_token_and_answers_lice
             "fingerprints": ["fp-test"],
             "name": "Rae's laptop",
             "major": 1,
+            "kids": [h.key.kid()],
         })
     );
     assert_has(
@@ -539,6 +540,7 @@ fn status_never_claims_under_the_host_name_and_starts_no_wait_but_start_trial_do
             "fingerprintKind": "hostname",
             "fingerprints": ["fp-host"],
             "major": 1,
+            "kids": [h.key.kid()],
         })
     );
 }
@@ -562,7 +564,7 @@ fn sends_every_fingerprint_the_run_read_when_the_device_is_not_held_too() {
     // Not held: no kind, and both fingerprints all the same.
     assert_eq!(
         h.http.body_of("claim"),
-        json!({ "token": TOKEN, "fingerprint": "fp-own", "fingerprints": ["fp-own", "fp-host"], "major": 1 })
+        json!({ "token": TOKEN, "fingerprint": "fp-own", "fingerprints": ["fp-own", "fp-host"], "major": 1, "kids": [h.key.kid()] })
     );
 }
 
@@ -923,7 +925,7 @@ fn refuses_a_bought_key_whose_lease_another_key_signed_or_someone_changed_droppi
     let foreign = TestKey::new(9).lease(BOUGHT_KEY, "perpetual", 30 * 86_400, NOW);
     let changed = tampered(&h.lease(BOUGHT_KEY, "perpetual", 30 * 86_400, NOW));
     // Both refused by their signature, and nothing else: their claims are a lease's.
-    let key = PublicKey::parse(&h.key.public_jwk()).expect("the product's key");
+    let key = KeySet::parse(&h.key.public_jwk()).expect("the product's key");
     for lease in [&foreign, &changed] {
         assert!(matches!(
             verify_lease(lease, &key, NOW),
@@ -1001,6 +1003,7 @@ fn claims_under_a_machine_id_with_its_kind_and_keys_the_install_by_it() {
             "fingerprintKind": "machine",
             "fingerprints": ["fp-machine"],
             "major": 1,
+            "kids": [h.key.kid()],
         })
     );
     assert_eq!(h.state().device_kind, Some(DeviceKind::Machine));

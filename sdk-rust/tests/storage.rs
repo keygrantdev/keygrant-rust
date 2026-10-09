@@ -158,16 +158,10 @@ fn clears_the_temps_crashes_left_once_a_write_lands_and_not_another_instances_wr
     file("sluice.json.2.2.inflight.tmp", r#"{"key":"IN"#, None);
     // Another product's temp in the same folder is not this file's to clear.
     file("maindeck.json.3.3.other.tmp", "{}", Some(stale * 2));
-    file(
-        "sluice.json.4.4.younger.tmp",
-        "{}",
-        Some(stale - Duration::from_secs(5)),
-    );
-    file(
-        "sluice.json.5.5.older.tmp",
-        "{}",
-        Some(stale + Duration::from_secs(5)),
-    );
+    // Half the limit either side of it: a machine that stalls between making these files and the write
+    // (a busy CI runner stalled past five seconds once) still finds the younger young and the older old.
+    file("sluice.json.4.4.younger.tmp", "{}", Some(stale / 2));
+    file("sluice.json.5.5.older.tmp", "{}", Some(stale * 3 / 2));
     FileStorage::new(dir.path().join("sluice.json"))
         .write(&k("K", 1))
         .expect("written");
@@ -201,23 +195,35 @@ fn leaves_the_state_as_it_was_and_no_temp_when_a_write_fails() {
     assert_eq!(names_in(dir.path()), ["sluice.json"]);
 }
 
-#[test]
-fn clears_a_temp_aged_the_cutoff_and_keeps_a_younger_one() {
-    // Whole milliseconds, as the storage reads the clock (like JavaScript's
-    // `Date.now()`).
-    let now = SystemTime::now()
+/// Whole milliseconds, as the storage reads the clock (like JavaScript's `Date.now()`).
+fn now_ms() -> f64 {
+    SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .expect("after the epoch")
-        .as_millis() as f64;
+        .as_millis() as f64
+}
+
+#[test]
+fn clears_a_temp_aged_the_cutoff_and_keeps_a_younger_one() {
+    // The storage reads the system clock itself, so the cutoff is pinned to the millisecond by a write
+    // made within one: the clock is read before and after it, and a try whose two readings differ is
+    // made again, on fresh files. Aged exactly the cutoff is cleared; a millisecond younger is kept.
     let edge = sibling(".1.1.edge.tmp");
     let inside = sibling(".2.2.inside.tmp");
-    let memory = MemoryFs::new(&[(&state_path(), SAVED), (&edge, "{}"), (&inside, "{}")]);
-    memory.set_mtime(&edge, now - STALE_TEMP_MS);
-    memory.set_mtime(&inside, now - STALE_TEMP_MS + 2_000.0);
-    over_memory(&memory, &Slept::default())
-        .write(&k("K", 1))
-        .expect("written");
-    assert_eq!(memory.names(), [state_path(), inside]);
+    for _ in 0..1_000 {
+        let now = now_ms();
+        let memory = MemoryFs::new(&[(&state_path(), SAVED), (&edge, "{}"), (&inside, "{}")]);
+        memory.set_mtime(&edge, now - STALE_TEMP_MS);
+        memory.set_mtime(&inside, now - STALE_TEMP_MS + 1.0);
+        over_memory(&memory, &Slept::default())
+            .write(&k("K", 1))
+            .expect("written");
+        if now_ms() == now {
+            assert_eq!(memory.names(), [state_path(), inside]);
+            return;
+        }
+    }
+    panic!("no write ran within one millisecond in 1,000 tries");
 }
 
 #[test]

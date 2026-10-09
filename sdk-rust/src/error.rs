@@ -168,3 +168,19 @@ impl fmt::Display for ConfigError {
 }
 
 impl std::error::Error for ConfigError {}
+
+/// What [`License::require`](crate::License::require) answers when the
+/// licence does not grant an entitlement: names it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MissingEntitlement {
+    /// The entitlement's code, as the app asked for it.
+    pub entitlement: String,
+}
+
+impl fmt::Display for MissingEntitlement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "the licence does not grant {:?}", self.entitlement)
+    }
+}
+
+impl std::error::Error for MissingEntitlement {}

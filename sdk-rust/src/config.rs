@@ -85,9 +85,13 @@ pub struct LicenseConfig {
     pub product: String,
     /// The KeyGrant API base, e.g. `https://api.keygrant.dev`.
     pub api_base_url: String,
-    /// The product's public key, embedded at build time for offline
-    /// verification: its JWK (`{"kty":"OKP","crv":"Ed25519","x":"..."}`) or
-    /// the JWK's `x` alone.
+    /// The product's public keys, embedded at build time for offline
+    /// verification: its key set (`{"keys":[...]}`, the `keys` of
+    /// `GET https://api.keygrant.dev/v1/products/<product>/pubkey`: the key
+    /// that signs its leases, and the next one once the product has one
+    /// staged), a JSON list of JWKs, or one key, a set of one: its JWK
+    /// (`{"kty":"OKP","crv":"Ed25519","x":"..."}`) or the JWK's `x` alone
+    /// ([`KeySet::parse`](crate::lease::KeySet::parse)).
     pub public_jwk: String,
     /// The running app's major version (default 1). Set it: the server binds
     /// an unbound key to the major its first activation runs. Read as the

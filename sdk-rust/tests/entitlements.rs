@@ -12,7 +12,7 @@ use std::thread;
 use std::time::Duration;
 
 use common::*;
-use keygrant::lease::{verify_lease, LeaseClaims, PublicKey, VerifyFailure, VerifyResult};
+use keygrant::lease::{verify_lease, KeySet, LeaseClaims, VerifyFailure, VerifyResult};
 use keygrant::offline::{
     lease_status, trial_lease_of, trial_status_of, LeaseCheck, LeaseFailure, TrialLease,
 };
@@ -662,7 +662,7 @@ fn verified_ent_text(ent: Option<&str>) -> BTreeMap<String, Entitlement> {
         r#"{{"iss":"keygrant","sub":"{KEY}","product":"{PRODUCT}","aid":"act_1","model":"perpetual","lim":3,"iat":{iat},"exp":{exp}{ent}}}"#
     );
     let token = key.sign_text(&payload);
-    let public = PublicKey::parse(&key.public_jwk()).expect("a key");
+    let public = KeySet::parse(&key.public_jwk()).expect("a key");
     match verify_lease(&token, &public, NOW) {
         VerifyResult::Valid(claims) => claims.ent,
         other => panic!("expected a valid lease, got {other:?}"),

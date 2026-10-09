@@ -41,8 +41,9 @@ pub enum LicenseState {
 /// on another device (this machine changed, or the licence file was copied
 /// from another one); activate again on this one. `Tampered`: the lease is not
 /// for this licence at all (another key or activation, another product, a bad
-/// signature). `Storage`: the licence file could not be read just now (state
-/// `Unknown`).
+/// signature). `UnknownKey`: the lease is signed by a key this build does not
+/// carry; asked online, the server signs one with the key it uses now.
+/// `Storage`: the licence file could not be read just now (state `Unknown`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LicenseReason {
@@ -62,6 +63,9 @@ pub enum LicenseReason {
     Trial,
     /// The licence file could not be read just now.
     Storage,
+    /// The lease is signed by a key this build does not carry.
+    #[serde(rename = "unknown-key")]
+    UnknownKey,
 }
 
 /// The licence's status, as `status()`, `refresh()` and `start_trial()` answer it.

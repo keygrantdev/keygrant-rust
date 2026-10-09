@@ -70,13 +70,13 @@ pub use adapters::{
 #[doc(hidden)]
 pub use config::Timings;
 pub use config::{LicenseConfig, LOCK_GRACE};
-pub use error::{ActivateError, ActivateResult, ConfigError, Error};
+pub use error::{ActivateError, ActivateResult, ConfigError, Error, MissingEntitlement};
 pub use fingerprint::{
     hash_fingerprint, host_fingerprint, host_name, host_names, hostname_fingerprint, identity_of,
     machine_fingerprint, DefaultFingerprinter, HostNames, UNKNOWN_HOST,
 };
 pub use http::{UreqHttp, DEFAULT_HTTP_TIMEOUT};
-pub use lease::Entitlement;
+pub use lease::{grants, Entitlement, KeySet};
 pub use license::License;
 #[cfg(windows)]
 pub use registry::WindowsRegistryStash;

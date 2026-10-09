@@ -205,7 +205,11 @@ impl License {
     /// POST `claim` with its body (pickup.rs `claim_request`); none when no
     /// answer came.
     fn post_claim(&self, body: &ClaimRequest, timeout: Option<Duration>) -> Option<HttpResponse> {
-        self.engine.post("claim", body.to_json(), timeout).ok()
+        let mut body = body.to_json();
+        if let serde_json::Value::Object(map) = &mut body {
+            map.insert("kids".into(), self.engine.kids());
+        }
+        self.engine.post("claim", body, timeout).ok()
     }
 
     /// The lease a claim's 200 carried with a key and an activation id,

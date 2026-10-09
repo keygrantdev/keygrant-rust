@@ -60,6 +60,13 @@ impl TestKey {
         }
     }
 
+    /// The id a lease names this key by (its thumbprint), as a check-in reports it.
+    pub fn kid(&self) -> String {
+        keygrant::lease::PublicKey::parse(&self.public_jwk())
+            .expect("the key")
+            .kid()
+    }
+
     pub fn public_jwk(&self) -> String {
         json!({ "kty": "OKP", "crv": "Ed25519", "x": b64url(self.signing.verifying_key().as_bytes()) }).to_string()
     }
@@ -79,6 +86,16 @@ impl TestKey {
                 .as_bytes(),
         );
         let body = b64url(payload.as_bytes());
+        let input = format!("{header}.{body}");
+        let signature = self.signing.sign(input.as_bytes());
+        format!("{input}.{}", b64url(&signature.to_bytes()))
+    }
+
+    /// Any payload, signed under a header that names the key `kid`, as the
+    /// server signs a lease.
+    pub fn sign_named(&self, payload: &Value, kid: &str) -> String {
+        let header = b64url(format!(r#"{{"alg":"EdDSA","typ":"JWT","kid":"{kid}"}}"#).as_bytes());
+        let body = b64url(payload.to_string().as_bytes());
         let input = format!("{header}.{body}");
         let signature = self.signing.sign(input.as_bytes());
         format!("{input}.{}", b64url(&signature.to_bytes()))

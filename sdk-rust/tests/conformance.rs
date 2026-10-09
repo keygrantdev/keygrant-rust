@@ -18,7 +18,7 @@ use std::time::Duration;
 use keygrant::device::device_from;
 use keygrant::launch::TRIAL_REPORT_MS;
 use keygrant::lease::{
-    entitlements_of, fingerprint_claim, verify_lease, LeaseClaims, LicenseModel, PublicKey,
+    entitlements_of, fingerprint_claim, verify_lease, KeySet, LeaseClaims, LicenseModel, PublicKey,
     VerifyResult, OPEN_MAJOR,
 };
 use keygrant::machine_id::{
@@ -124,8 +124,13 @@ fn every_number_in_the_file_is_read_as_the_nearest_double() {
 #[path = "conformance/purchase.rs"]
 mod purchase;
 
+/// The key-set groups, after the purchase groups, answered in
+/// `conformance/keys.rs`.
+#[path = "conformance/keys.rs"]
+mod keys;
+
 /// Every group this harness answers, in the file's order.
-const GROUPS: [&str; 43] = [
+const GROUPS: [&str; 46] = [
     "leases",
     "trials",
     "fingerprintClaims",
@@ -169,6 +174,9 @@ const GROUPS: [&str; 43] = [
     "trialReportDue",
     "purchaseReferences",
     "claimBodies",
+    "keyIds",
+    "keySets",
+    "grants",
 ];
 
 fn group<'a>(vectors: &'a Value, name: &str) -> &'a Vec<Value> {
@@ -338,8 +346,9 @@ fn constants_are_the_references() {
 
 // --- leases and trials --------------------------------------------------------------
 
-fn key(vectors: &Value) -> PublicKey {
-    PublicKey::from_jwk(&vectors["publicJwk"]).expect("the vectors' public key")
+/// The vectors' key, as the key set of one every group but `keySets` verifies with.
+fn key(vectors: &Value) -> KeySet {
+    KeySet::from(PublicKey::from_jwk(&vectors["publicJwk"]).expect("the vectors' public key"))
 }
 
 #[test]
@@ -370,7 +379,15 @@ fn leases_verify_and_check() {
         assert_eq!(answer, vector["expect"], "{name}: expect");
     }
     // Every kind of verdict the offline check can give is covered.
-    let all = ["device", "expired", "ok", "outdated", "tampered", "upgrade"];
+    let all = [
+        "device",
+        "expired",
+        "ok",
+        "outdated",
+        "tampered",
+        "unknown-key",
+        "upgrade",
+    ];
     assert_eq!(verdicts.into_iter().collect::<Vec<_>>(), all);
 }
 
@@ -728,6 +745,7 @@ fn lease_failure(word: &str) -> LeaseFailure {
         "upgrade" => LeaseFailure::Upgrade,
         "outdated" => LeaseFailure::Outdated,
         "tampered" => LeaseFailure::Tampered,
+        "unknown-key" => LeaseFailure::UnknownKey,
         "device" => LeaseFailure::Device,
         other => panic!("unknown lease failure {other:?}"),
     }

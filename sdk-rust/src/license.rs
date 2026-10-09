@@ -4,28 +4,19 @@ use std::fmt;
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
-use serde_json::{Map, Value};
+mod activation;
+mod status_flow;
 
 use crate::config::LicenseConfig;
-use crate::device::{activation_identity, Device};
-use crate::engine::{Engine, GuardSave, Holder};
-use crate::error::{ActivateError, ActivateResult, ConfigError, Error};
-use crate::offline::{
-    ask_due, held_elsewhere, kept_with, lease_status, same_key, standing_refusal, unkeyed, About,
-    Asked, Basis, DeviceView, LeaseCheck,
-};
-use crate::pickup::{activation_patch, no_purchase, Activation};
+use crate::engine::Engine;
+use crate::error::{ActivateError, ActivateResult, ConfigError, Error, MissingEntitlement};
+use crate::lease::grants;
+use crate::offline::Basis;
 use crate::purchases::{Pickup, PickupAsk};
-use crate::renewal::{asks_on_valid_lease, ValidLeaseAsk};
-use crate::state::{present, Patch, StoredState};
-use crate::status::DeviceKind;
-use crate::status::{
-    DeactivateResult, LicenseError, LicenseReason, LicenseState, LicenseStatus, Refusal,
-};
+use crate::state::{present, Patch};
+use crate::status::{DeactivateResult, LicenseError, LicenseReason, LicenseState, LicenseStatus};
 use crate::url::{is_absolute_link, referenced_link};
-use crate::wire::{
-    entered_key, error_of, map_server_error, parse_lease_body, trim_to_length, MAX_DEVICE_NAME,
-};
+use crate::wire::{trim_to_length, MAX_DEVICE_NAME};
 
 /// Client-side licensing for a desktop app.
 ///
@@ -229,6 +220,34 @@ impl License {
         })
     }
 
+    /// Whether the licence this device holds grants the entitlement `code`: a
+    /// flag that is on, a number that is not zero, or a text that is not
+    /// empty ([`grants`](crate::grants)). Offline, from the stored lease only:
+    /// the entitlements of the status `status()` gives from what is stored,
+    /// with no ask and no write, so a licence that does not license this
+    /// build, and none at all, grant nothing. A running trial grants what its
+    /// trial lease does. A state that cannot be read grants nothing just now.
+    pub fn has(&self, code: &str) -> bool {
+        let status = match self.load_for_status(true) {
+            Some(state) => self.status_now(&state, false, true),
+            None => unreadable(),
+        };
+        grants(&status.entitlements, code)
+    }
+
+    /// `Ok` when [`has`](License::has) is true; otherwise the
+    /// [`MissingEntitlement`] naming `code`: for work that may run only when
+    /// the licence grants that entitlement.
+    pub fn require(&self, code: &str) -> Result<(), MissingEntitlement> {
+        if self.has(code) {
+            Ok(())
+        } else {
+            Err(MissingEntitlement {
+                entitlement: code.to_owned(),
+            })
+        }
+    }
+
     /// Begin (or re-sync) a trial for this device. Like `status()` for
     /// storage: `Unknown` when the state cannot be read, and the server's
     /// trial when it cannot be saved.
@@ -266,286 +285,4 @@ impl License {
     }
 
     // --- internals -------------------------------------------------------
-
-    fn activate_now(&self, key: &str) -> ActivateResult {
-        let Some(entered) = entered_key(key) else {
-            return Err(LicenseError::InvalidKey.into());
-        };
-        // Install memory protects the seat this install holds: re-activating
-        // that key keeps to it; a first activation, or another key's, starts afresh.
-        let stored = self.engine.load(false).map_err(ActivateError::Storage)?;
-        let same_seat = stored
-            .key
-            .as_deref()
-            .is_some_and(|stored| same_key(stored, &entered));
-        let install_kind = if same_seat {
-            self.engine.install_kind(stored.device_kind)
-        } else {
-            None
-        };
-        let device = self
-            .engine
-            .device(self.engine.timings.activate_machine_id, install_kind);
-        let Some((fingerprint, kind)) = activation_identity(&device, install_kind) else {
-            return Err(LicenseError::Network.into());
-        };
-        // Stamped with when it was asked for: an older ask's answer, from
-        // another process, is not saved over it.
-        let asked_at = self.engine.effective_now(&stored);
-        let body = self.activate_body(&entered, fingerprint, kind);
-        let Ok(response) = self.engine.post("activate", body, None) else {
-            return Err(LicenseError::Network.into());
-        };
-        if response.status != 200 {
-            return Err(map_server_error(error_of(response.json.as_ref())).into());
-        }
-        let (lease, activation_id) = parse_lease_body(response.json.as_ref());
-        let usable = |text: Option<String>| text.filter(|text| !text.is_empty());
-        let (Some(lease), Some(activation_id)) = (usable(lease), usable(activation_id)) else {
-            return Err(LicenseError::Network.into());
-        };
-        let now = self
-            .engine
-            .server_now(&lease, &entered, &activation_id, GuardSave::Strict)
-            .map_err(ActivateError::Storage)?;
-        let holder = Holder {
-            key: Some(&entered),
-            activation_id: Some(&activation_id),
-            device_kind: kind,
-        };
-        let LeaseCheck::Ok { claims, .. } = self.engine.evaluate(&lease, now, &holder) else {
-            return Err(LicenseError::InvalidLease.into());
-        };
-        // As a bought key's claim saves one (pickup.rs `activation_patch`),
-        // the purchase secret cleared too: else a later deactivate would let a
-        // pending pickup activate the device again.
-        let patch = activation_patch(&Activation {
-            key: &entered,
-            activation_id: &activation_id,
-            lease: &lease,
-            claims: &claims,
-            now,
-            major: self.engine.major,
-            kind,
-        });
-        let basis = Basis {
-            activation: Some(Asked {
-                at: asked_at,
-                activation_id: Some(activation_id),
-                seen: stored.verdict_at,
-            }),
-            ..Basis::default()
-        };
-        self.engine
-            .save(&patch, None, &basis)
-            .map_err(ActivateError::Storage)
-    }
-
-    /// An activation's body: the key, the fingerprint it is made under (and
-    /// its kind), the device name when the app gave one, and the major.
-    fn activate_body(&self, key: &str, fingerprint: String, kind: Option<DeviceKind>) -> Value {
-        let mut body = Map::new();
-        body.insert("key".into(), Value::from(key));
-        body.insert("fingerprint".into(), Value::from(fingerprint));
-        if let Some(kind) = kind {
-            body.insert("fingerprintKind".into(), Value::from(kind.as_str()));
-        }
-        if let Some(name) = &self.device_name {
-            body.insert("name".into(), Value::from(name.clone()));
-        }
-        body.insert("major".into(), Value::from(self.engine.major));
-        Value::Object(body)
-    }
-
-    fn deactivate_now(&self) -> Result<DeactivateResult, Error> {
-        let state = self.engine.load(false).map_err(Error::Storage)?;
-        // Nothing held is nothing to release: the seat is as free as it gets.
-        // Nor is a seat another device holds this one's to release.
-        let mut released = true;
-        let held = match (present(&state.key), present(&state.activation_id)) {
-            (Some(key), Some(activation_id)) if !self.seat_elsewhere(&state) => {
-                Some((key, activation_id))
-            }
-            _ => None,
-        };
-        if let Some((key, activation_id)) = held {
-            // Only a 200 is KeyGrant saying the seat is free. A 5xx, a 429 or a
-            // proxy's page is an answer, but not that one, and no answer is
-            // none; the local licence is dropped below either way.
-            let body = serde_json::json!({ "key": key, "activationId": activation_id });
-            released = self
-                .engine
-                .post("deactivate", body, None)
-                .is_ok_and(|response| response.status == 200);
-        }
-        // Stamped, so that an answer to an older ask is not saved over it.
-        let patch = unkeyed().then(no_purchase()).then(Patch {
-            verdict_at: Some(Some(self.engine.effective_now(&state))),
-            ..Patch::default()
-        });
-        self.engine
-            .save(&patch, None, &Basis::default())
-            .map_err(Error::Storage)?;
-        Ok(DeactivateResult { released })
-    }
-
-    /// Whether the stored activation is another device's: a device refusal
-    /// that stands for this one, or a lease held to a machine id this device
-    /// does not have, expired or not (`held_elsewhere`). A state file copied
-    /// or restored from another PC carries that PC's activation; releasing it
-    /// would lock that PC out at its next check-in.
-    fn seat_elsewhere(&self, state: &StoredState) -> bool {
-        let device = self
-            .engine
-            .device(self.engine.timings.machine_id, state.device_kind);
-        let view = DeviceView {
-            own_claim: device.own_claim.as_deref(),
-            can_tell: device.can_tell,
-        };
-        if standing_refusal(state, self.engine.major, Some(view)) == Some(Refusal::Device) {
-            return true;
-        }
-        present(&state.lease).is_some_and(|lease| {
-            let verified = self.engine.verify(lease, self.engine.effective_now(state));
-            held_elsewhere(&verified, &device.claims, device.can_tell)
-        })
-    }
-
-    /// The status, asking the server when it should. `read_only`: from what
-    /// is stored only, with no ask and no write.
-    fn status_now(
-        &self,
-        state: &StoredState,
-        force_online: bool,
-        read_only: bool,
-    ) -> LicenseStatus {
-        let now = self.engine.effective_now(state);
-        // A device refusal stands only for the device it was given for: who this is.
-        let device: Option<Device> = (state.refused == Some(Refusal::Device)).then(|| {
-            self.engine
-                .device(self.engine.timings.machine_id, state.device_kind)
-        });
-        let view = device.as_ref().map(|device| DeviceView {
-            own_claim: device.own_claim.as_deref(),
-            can_tell: device.can_tell,
-        });
-        let key = present(&state.key);
-        let refused = key.and_then(|_| standing_refusal(state, self.engine.major, view));
-        if let Some(refused) = refused {
-            if read_only {
-                return invalid(refused.reason(), key);
-            }
-            return self.refused_status(state, refused, force_online);
-        }
-        if let (Some(_), Some(lease)) = (key, present(&state.lease)) {
-            return self.license_status(state, lease, now, force_online, read_only);
-        }
-        // No licence held: a key bought through `purchase_url` is picked up
-        // first (purchases.rs `pick_up`), never read-only.
-        let picked = if read_only {
-            Pickup::State(Box::new(state.clone()))
-        } else {
-            let ask = PickupAsk {
-                start: false,
-                force: force_online,
-                device: None,
-            };
-            self.pick_up(state, ask)
-        };
-        let state = match picked {
-            Pickup::Bought(status) => return status,
-            Pickup::State(state) => state,
-        };
-        if state.trial_start.is_some() {
-            return self.trial_status_asking(&state, now, force_online, read_only);
-        }
-        LicenseStatus::new(LicenseState::Unlicensed)
-    }
-
-    /// A refusal that stands for this build: answered as stored, and asked
-    /// again once the wait after the last ask is over, or when forced.
-    fn refused_status(&self, state: &StoredState, refused: Refusal, force: bool) -> LicenseStatus {
-        let stored = invalid(refused.reason(), state.key.as_deref());
-        if !ask_due(state, self.engine.clock.now(), force) {
-            return stored;
-        }
-        self.engine.try_renew(state, None).unwrap_or(stored)
-    }
-
-    fn license_status(
-        &self,
-        state: &StoredState,
-        lease: &str,
-        now: i64,
-        force_online: bool,
-        read_only: bool,
-    ) -> LicenseStatus {
-        let check = self.engine.evaluate(lease, now, &Holder::of(state));
-        // What the lease says offline, entitlements included: the answer
-        // whenever the server gives no verdict (offline.rs `lease_status`).
-        let offline = lease_status(&check, state.key.as_deref());
-        let LeaseCheck::Ok { claims, .. } = check else {
-            // Locally invalid (expired, tampered, upgrade, outdated, device):
-            // give the server a chance to heal it before locking the customer
-            // out, once the wait is over, or when forced.
-            if !read_only && ask_due(state, self.engine.clock.now(), force_online) {
-                if let Some(renewed) = self.engine.try_renew(state, None) {
-                    return renewed;
-                }
-            }
-            return offline;
-        };
-        if read_only {
-            return offline;
-        }
-        let held = self.note_kept(state, claims.upgrade_until, now);
-        if force_online {
-            return self.engine.try_renew(&held, None).unwrap_or(offline);
-        }
-        // Asked, bounded in time, when the server should hear from this
-        // device before the lease runs out (a newer major on an open lease, or
-        // a lease nearing its end) and the wait allows (renewal.rs
-        // `asks_on_valid_lease`). The valid lease is the answer when the ask
-        // gets no verdict.
-        let ask = ValidLeaseAsk {
-            claims: &claims,
-            state: &held,
-            major: self.engine.major,
-            now,
-            clock_now: self.engine.clock.now(),
-        };
-        if !asks_on_valid_lease(&ask) {
-            return offline;
-        }
-        self.engine
-            .try_renew(&held, Some(self.engine.timings.status_check))
-            .unwrap_or(offline)
-    }
-
-    /// The state with this run noted in `kept_major`, persisted when that changed.
-    fn note_kept(&self, state: &StoredState, upgrade_until: Option<i64>, now: i64) -> StoredState {
-        let kept = kept_with(state.kept_major, upgrade_until, now, self.engine.major);
-        if kept == state.kept_major {
-            return state.clone();
-        }
-        // About this activation: not saved onto another one stored meanwhile.
-        let basis = Basis {
-            about: Some(About {
-                activation_id: state.activation_id.clone(),
-            }),
-            ..Basis::default()
-        };
-        self.engine.save_best_effort(
-            &Patch {
-                kept_major: Some(kept),
-                ..Patch::default()
-            },
-            None,
-            &basis,
-        );
-        StoredState {
-            kept_major: kept,
-            ..state.clone()
-        }
-    }
 }

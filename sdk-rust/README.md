@@ -40,29 +40,46 @@ the app's own `serde_json` too), `getrandom` 0.2 (the platform's CSPRNG, for
 a purchase secret) and `ureq` 3 (rustls); `winreg` and `whoami` on Windows,
 `hostname` elsewhere. The crate itself forbids `unsafe`.
 
-## Embedding the public key
+## Embedding the public keys
 
-When the product is provisioned, KeyGrant returns its **public** JWK
-(`{"kty":"OKP","crv":"Ed25519","x":"..."}`). Commit it next to your app and
-embed it at build time:
+The product's **public** keys are the `keys` of
+`GET https://api.keygrant.dev/v1/products/<slug>/pubkey` (public, no API key),
+and the dashboard's Signing key tab copies the same set (Copy key set). Save
+it next to your app when you build and embed it:
 
 ```rust
-const PUBLIC_JWK: &str = include_str!("../keygrant-public.json");
+const PUBLIC_KEYS: &str = include_str!("../keygrant-keys.json"); // {"keys":[...]}
 ```
 
-`public_jwk` takes the whole JWK or its `x` member alone. A JWK that carries
-the private key (`d`) is refused: an app that ships it lets anyone forge leases.
+`public_jwk` takes the key set (`{"keys":[...]}`, or the whole `/pubkey`
+answer), a JSON list of JWKs, or one key, a set of one: its JWK or its `x`
+member alone, as before. A JWK that carries the private key (`d`) is refused:
+an app that ships it lets anyone forge leases.
+
+**Why a set.** A lease names the key that signed it (`kid` in its header, the
+key's RFC 7638 thumbprint, which the SDK computes from the key itself). It is
+verified by that key; a lease that names none (every lease signed before key
+sets) by each key in turn; and one naming a key the build does not carry is
+refused (`UnknownKey`). When the product rotates its signing key, it first
+*stages* the next key, published beside the current one while every lease is
+still signed with the current key. Ship builds carrying both; once they are
+out, the product *switches*, and those builds verify every lease signed after
+it. Embed the whole set each time you build.
+
+Each activation, validate and claim reports the ids of the keys the build
+carries (`kids`), so the dashboard can count the devices still on builds
+without the staged key before you switch.
 
 ## Plain Rust
 
 ```rust
 use keygrant::{License, LicenseConfig, LicenseState};
 
-const PUBLIC_JWK: &str = include_str!("../keygrant-public.json");
+const PUBLIC_KEYS: &str = include_str!("../keygrant-keys.json");
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let license = License::new(
-        LicenseConfig::new("sluice", "https://api.keygrant.dev", PUBLIC_JWK)
+        LicenseConfig::new("sluice", "https://api.keygrant.dev", PUBLIC_KEYS)
             // The running app's major version. Set it: an unbound key is bound
             // to the major its first activation runs. A 0.x app (major 0) runs
             // as major 1, as the server reads its version.
@@ -107,7 +124,7 @@ use std::sync::Arc;
 
 use keygrant::{License, LicenseConfig, LicenseStatus};
 
-const PUBLIC_JWK: &str = include_str!("../keygrant-public.json");
+const PUBLIC_KEYS: &str = include_str!("../keygrant-keys.json");
 
 #[tauri::command]
 async fn license_status(
@@ -141,7 +158,7 @@ async fn start_trial(license: tauri::State<'_, Arc<License>>) -> Result<LicenseS
 
 fn main() {
     let license = License::new(
-        LicenseConfig::new("sluice", "https://api.keygrant.dev", PUBLIC_JWK)
+        LicenseConfig::new("sluice", "https://api.keygrant.dev", PUBLIC_KEYS)
             .major(env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap_or(1)),
     )
     .expect("the licence configuration is the developer's to fix");
@@ -263,7 +280,7 @@ fn returned(license: &License) {
 |---|---|---|
 | `product` | (required) | The product slug. |
 | `api_base_url` | (required) | `https://api.keygrant.dev`. |
-| `public_jwk` | (required) | The public JWK, or its `x`. |
+| `public_jwk` | (required) | The product's key set (`{"keys":[...]}`), a list of JWKs, one JWK, or its `x` (`KeySet::parse`). |
 | `major` | `1` | The running app's major version. `0` (a 0.x app) runs as `1`, as the server reads a version. |
 | `device_name` | none | A label for the device list; cut to 120 UTF-16 units. |
 | `device_hold` | `true` | See below. |
@@ -285,6 +302,7 @@ Each has a builder method of the same name (`.major(3)`, `.storage(...)`, ...).
 | `Invalid` | `Outdated` | This build is older than the key covers: update the app. |
 | `Invalid` | `Device` | The licence was activated on another device (this machine changed, or the licence file was copied): activate again here. |
 | `Invalid` | `Tampered` | The stored lease is not for this licence. Activate again. |
+| `Invalid` | `UnknownKey` | The stored lease is signed by a key this build does not carry. Online, the server renews it with the key it signs with now; when it stays so online, the build does not carry the product's signing key: update the app. |
 | `Unlicensed` | | No licence and no trial. |
 | `Unknown` | `Storage` | The licence file could not be read just now (an antivirus scan holding it). Keep running and ask again shortly; never show the activation screen for it. |
 
@@ -378,7 +396,7 @@ if status.test && !cfg!(debug_assertions) {
 ## Entitlements
 
 A licence can grant more than the base product: an edition, a number of seats,
-a feature. The lease signs them (its `ent` claim), and the status hands them to
+an add-on. The lease signs them (its `ent` claim), and the status hands them to
 the app as `entitlements`, read offline like everything else on the lease:
 
 ```rust
@@ -411,6 +429,25 @@ let seats = status.entitlements.get("seats").and_then(Entitlement::as_f64).unwra
   how long): the signature is what it trusts.
 - **A copy:** the status owns its map, so changing it changes nothing the next
   status says.
+
+To ask whether the licence grants an entitlement, name its code:
+
+```rust
+if license.has("cloud_sync") {
+    enable_cloud_sync();
+}
+license.require("export")?; // Err(MissingEntitlement { entitlement: "export" })
+```
+
+`has(code)` is true for a flag that is on, a number that is not zero, or a text
+that is not empty; false for anything else, and for a code the lease does not
+grant (matched exactly, case included). It is answered offline from the stored
+lease only, as `status()` would answer from what is stored, with no request and
+no write: a licence that does not license this build, or none at all, grants
+nothing; a running trial grants what its trial lease does. `require(code)` is
+`Err(MissingEntitlement)`, naming the code, when `has` would be false.
+`keygrant::grants(&status.entitlements, code)` answers the same of a status
+already in hand.
 
 ## Where the state is kept
 

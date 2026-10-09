@@ -18,7 +18,10 @@
     "purchaseTokenKept, claimDue and trialReportDue take a stored state; purchaseTokenKept and trialReportDue judge it at now (the guarded clock); claimDue judges the link's freshness (purchaseTokenAt) at now and the wait (claimAskedAt) at clockNow (the device clock).",
     "parseClaimBody.expect keeps key, activationId and lease when they are strings, pending only when it is true, error only when it is a string of at least one character; every other member, and a body that is not an object, gives nothing ({}).",
     "claimOutcomes.response is the claim's answer (null for none at all); claimOutcomes.check is the SDK's offline check of the lease a 200 carried with key, activationId and lease (as leases.expect, with the claims when ok), null otherwise; claimOutcomes.kind is what the claim's fingerprint hashes (null for none). expect.result is bought, kept or dropped; expect.status is the status a bought key gives (null otherwise); expect.patch is the patch, with no stamp in it: a bought key's is saved with basis activation {at: the ask's guarded time, activationId, seen: the stored verdictAt}, which stamps verdictAt; a kept secret's with basis purchase {token: the secret, at: the purchaseTokenAt the ask read}; a dropped one's with basis purchase {token: the secret}.",
-    "claimBodies: the body a claim sends, null when none is sent. The device is deviceFrom(identity, no install kind, deviceHold), as the devices group reads one; start is true for startTrial(), false for status() and refresh(). fingerprints counts characters in UTF-16 units, as the server does; deviceName is the name already cut (trimDeviceName), null for none; major is the major already read (majors)."
+    "claimBodies: the body a claim sends, null when none is sent. The device is deviceFrom(identity, no install kind, deviceHold), as the devices group reads one; start is true for startTrial(), false for status() and refresh(). fingerprints counts characters in UTF-16 units, as the server does; deviceName is the name already cut (trimDeviceName), null for none; major is the major already read (majors).",
+    "publicJwk is the key set of one every group but keySets verifies with: a lease naming no key (kid) is verified by it, one naming its id too, and one naming another id is unknown-key.",
+    "keyIds.expect is the id a lease names a key by: the base64url (no padding) of the SHA-256 of {\"crv\":\"Ed25519\",\"kty\":\"OKP\",\"x\":\"<x>\"}, its RFC 7638 thumbprint, or null for a JWK every SDK refuses: one that is not an object, whose kty is not OKP or crv not Ed25519 (both required), that holds d, whose use (when given) is not sig, whose key_ops (when given) are not a list naming verify, whose alg (when given) is neither EdDSA nor Ed25519, or whose x, its trailing = dropped, is not canonical base64url of 32 bytes. No other member is read. keySets.kids are the ids of keys, in the order given, a key given twice kept once; keySets.verify is the lease verified against that set at now, as leases.verify.",
+    "grants.expect: whether ent, read as a lease's ent is read, grants code: a flag that is true, a number that is not 0, a text that is not empty; the code matched exactly."
   ],
   "publicJwk": {
     "kty": "OKP",
@@ -3475,6 +3478,89 @@
       "expect": {
         "ok": true,
         "test": false
+      }
+    },
+    {
+      "name": "a lease naming the vectors' key: licensed",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6IjQ5UlFDWWxIVzI4TnJSS0x3TXNiNVdKNlhjc1NTVFlnZXltNkI1OUpkWTAifQ.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.PEVoBhh4PZjvjkjuOFE2F1gEMLp5mpvCsXY1-O5uPE0fQF2wNpLvtF4bhqiuyR76w-0jM2GeQ9_DTgTCqKfuDA",
+      "now": 1790000000000,
+      "product": "sluice",
+      "major": 1,
+      "holder": {
+        "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+        "activationId": "act_1",
+        "claims": [
+          "c68a8977e2f4ca5e6cb48b26f4041c9065acff63b0c9ecc7599484b7f83be95b",
+          "d118cdbe6e8685638826b50d9f8ff8556a36b692915482e17bdd21b69ce08a00"
+        ],
+        "canTell": true
+      },
+      "verify": {
+        "valid": true,
+        "claims": {
+          "iss": "keygrant",
+          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "product": "sluice",
+          "aid": "act_1",
+          "model": "perpetual",
+          "lim": 3,
+          "major": 3,
+          "ent": {},
+          "iat": 1789913600,
+          "exp": 1792505600
+        }
+      },
+      "expect": {
+        "ok": true,
+        "test": false
+      }
+    },
+    {
+      "name": "a lease naming a key the build does not carry: unknown-key",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6IlEzMXotSkZpLVRNVWdzaFpic1FSdTVScm5XMjFVZEdDSFpnVkZwMkU0RHMifQ.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.FZhFIkRV13Nvosg7-WJVC5A-febnEXWXDZZjDRmdNbwc8dPfZo97pbQ6Q1dkmtdblBBUphjuKLkAFDB5xnp8CA",
+      "now": 1790000000000,
+      "product": "sluice",
+      "major": 1,
+      "holder": {
+        "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+        "activationId": "act_1",
+        "claims": [
+          "c68a8977e2f4ca5e6cb48b26f4041c9065acff63b0c9ecc7599484b7f83be95b",
+          "d118cdbe6e8685638826b50d9f8ff8556a36b692915482e17bdd21b69ce08a00"
+        ],
+        "canTell": true
+      },
+      "verify": {
+        "valid": false,
+        "reason": "unknown-key"
+      },
+      "expect": {
+        "ok": false,
+        "reason": "unknown-key"
+      }
+    },
+    {
+      "name": "an expired lease naming a key the build does not carry: unknown-key, its end not read",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6IlEzMXotSkZpLVRNVWdzaFpic1FSdTVScm5XMjFVZEdDSFpnVkZwMkU0RHMifQ.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc4OTk5OTk5OX0.zyxDcrqp8iVF-gsG8fJlXWbL-vcCg8YCC0lzNRt7mKTJz84eJUyu5rRUoMZS9uimAaN5N_1RxXHvCs2egNw-Cg",
+      "now": 1790000000000,
+      "product": "sluice",
+      "major": 1,
+      "holder": {
+        "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+        "activationId": "act_1",
+        "claims": [
+          "c68a8977e2f4ca5e6cb48b26f4041c9065acff63b0c9ecc7599484b7f83be95b",
+          "d118cdbe6e8685638826b50d9f8ff8556a36b692915482e17bdd21b69ce08a00"
+        ],
+        "canTell": true
+      },
+      "verify": {
+        "valid": false,
+        "reason": "unknown-key"
+      },
+      "expect": {
+        "ok": false,
+        "reason": "unknown-key"
       }
     }
   ],
@@ -11149,6 +11235,100 @@
           "backoffMs": null
         }
       }
+    },
+    {
+      "name": "a 200 with a lease signed by a key the build does not carry: no verdict; read on a machine id",
+      "response": {
+        "status": 200,
+        "json": {
+          "lease": "header.payload.signature"
+        }
+      },
+      "check": {
+        "ok": false,
+        "reason": "unknown-key"
+      },
+      "askedAt": 1789999970000,
+      "now": 1790000000000,
+      "major": 3,
+      "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+      "keptMajor": 2,
+      "device": {
+        "kind": "machine",
+        "ownClaim": "c68a8977e2f4ca5e6cb48b26f4041c9065acff63b0c9ecc7599484b7f83be95b"
+      },
+      "expect": {
+        "answered": true,
+        "status": null,
+        "patch": {
+          "checkedMajor": 3,
+          "backoffSince": 1789999970000,
+          "backoffMs": 3600000,
+          "deviceKind": "machine"
+        }
+      }
+    },
+    {
+      "name": "a 200 with a lease signed by a key the build does not carry: no verdict; read on the host name",
+      "response": {
+        "status": 200,
+        "json": {
+          "lease": "header.payload.signature"
+        }
+      },
+      "check": {
+        "ok": false,
+        "reason": "unknown-key"
+      },
+      "askedAt": 1789999970000,
+      "now": 1790000000000,
+      "major": 3,
+      "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+      "keptMajor": 2,
+      "device": {
+        "kind": "hostname",
+        "ownClaim": "d118cdbe6e8685638826b50d9f8ff8556a36b692915482e17bdd21b69ce08a00"
+      },
+      "expect": {
+        "answered": true,
+        "status": null,
+        "patch": {
+          "checkedMajor": 3,
+          "backoffSince": 1789999970000,
+          "backoffMs": 3600000
+        }
+      }
+    },
+    {
+      "name": "a 200 with a lease signed by a key the build does not carry: no verdict; read on a fingerprint of no kind",
+      "response": {
+        "status": 200,
+        "json": {
+          "lease": "header.payload.signature"
+        }
+      },
+      "check": {
+        "ok": false,
+        "reason": "unknown-key"
+      },
+      "askedAt": 1789999970000,
+      "now": 1790000000000,
+      "major": 3,
+      "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+      "keptMajor": 2,
+      "device": {
+        "kind": null,
+        "ownClaim": "00d48b4792dd89b7c4eba62a9bb4859e16d1be613b0f40b51f92986f05001081"
+      },
+      "expect": {
+        "answered": true,
+        "status": null,
+        "patch": {
+          "checkedMajor": 3,
+          "backoffSince": 1789999970000,
+          "backoffMs": 3600000
+        }
+      }
     }
   ],
   "validLeaseAsks": [
@@ -12434,6 +12614,27 @@
           "__proto__": "studio",
           "seats": 3
         }
+      }
+    },
+    {
+      "name": "a lease signed by a key the build does not carry, with entitlements: invalid, unknown-key, with the key and none",
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6IlEzMXotSkZpLVRNVWdzaFpic1FSdTVScm5XMjFVZEdDSFpnVkZwMkU0RHMifQ.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnsiZWRpdGlvbiI6InBybyIsInNlYXRzIjo1LCJyYXRpbyI6MC41LCJkaXNjb3VudCI6LTIsImJldGEiOmZhbHNlLCJjbG91ZCI6dHJ1ZSwibGFiZWwiOiIifSwiaWF0IjoxNzg5OTEzNjAwLCJleHAiOjE3OTI1MDU2MDB9.ptjXQrhber6KyAxqzJmQQz2F9ssWQhls2TlLO9m6AJ9Hfksx69--mJ8zPul_JOlcPRFd6nC-2VC2nHEVbqR8DA",
+      "now": 1790000000000,
+      "product": "sluice",
+      "major": 1,
+      "holder": {
+        "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+        "activationId": "act_1",
+        "claims": [
+          "c68a8977e2f4ca5e6cb48b26f4041c9065acff63b0c9ecc7599484b7f83be95b",
+          "d118cdbe6e8685638826b50d9f8ff8556a36b692915482e17bdd21b69ce08a00"
+        ],
+        "canTell": true
+      },
+      "expect": {
+        "state": "invalid",
+        "reason": "unknown-key",
+        "key": "SLUICE-AAAA-BBBB-CCCC-DDDD"
       }
     }
   ],
@@ -14767,6 +14968,1506 @@
         "name": "Rae’s laptop",
         "major": 3
       }
+    }
+  ],
+  "keyIds": [
+    {
+      "name": "the vectors' key",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+      },
+      "expect": "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0"
+    },
+    {
+      "name": "the next key",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+      },
+      "expect": "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+    },
+    {
+      "name": "RFC 8037's example key, whose thumbprint the RFC gives",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"
+      },
+      "expect": "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k"
+    },
+    {
+      "name": "a JWK with its members in another order, a kid member and a use: only the key is read",
+      "jwk": {
+        "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps",
+        "kid": "chosen-by-hand",
+        "use": "sig",
+        "crv": "Ed25519",
+        "kty": "OKP"
+      },
+      "expect": "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+    },
+    {
+      "name": "a JWK whose x was pasted with base64 padding: the same key, the same id",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps="
+      },
+      "expect": "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+    },
+    {
+      "name": "a JWK with use sig, key_ops naming verify and alg EdDSA: the key",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps",
+        "use": "sig",
+        "key_ops": [
+          "verify"
+        ],
+        "alg": "EdDSA"
+      },
+      "expect": "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+    },
+    {
+      "name": "a JWK with alg Ed25519: the key",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps",
+        "alg": "Ed25519"
+      },
+      "expect": "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+    },
+    {
+      "name": "a JWK holding a private key (d): refused",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps",
+        "d": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "expect": null
+    },
+    {
+      "name": "a JWK with no kty: refused",
+      "jwk": {
+        "crv": "Ed25519",
+        "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+      },
+      "expect": null
+    },
+    {
+      "name": "a JWK with no crv: refused",
+      "jwk": {
+        "kty": "OKP",
+        "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+      },
+      "expect": null
+    },
+    {
+      "name": "a JWK of another key type: refused",
+      "jwk": {
+        "kty": "EC",
+        "crv": "Ed25519",
+        "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+      },
+      "expect": null
+    },
+    {
+      "name": "a JWK of another curve: refused",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "X25519",
+        "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+      },
+      "expect": null
+    },
+    {
+      "name": "a JWK for encryption (use enc): refused",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps",
+        "use": "enc"
+      },
+      "expect": null
+    },
+    {
+      "name": "a JWK whose key_ops do not name verify: refused",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps",
+        "key_ops": [
+          "sign"
+        ]
+      },
+      "expect": null
+    },
+    {
+      "name": "a JWK whose key_ops are not a list: refused",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps",
+        "key_ops": "verify"
+      },
+      "expect": null
+    },
+    {
+      "name": "a JWK for another algorithm: refused",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps",
+        "alg": "ES256"
+      },
+      "expect": null
+    },
+    {
+      "name": "a JWK with no x: refused",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519"
+      },
+      "expect": null
+    },
+    {
+      "name": "a JWK whose x is not text: refused",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": 7
+      },
+      "expect": null
+    },
+    {
+      "name": "a JWK whose x is in base64's standard alphabet: refused",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG/a13dwSwE+Ii1otps"
+      },
+      "expect": null
+    },
+    {
+      "name": "a JWK whose x holds white space: refused",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "5x8AEh6i8eeBZ4Pxc0e3 J9wvaG_a13dwSwE-Ii1otps"
+      },
+      "expect": null
+    },
+    {
+      "name": "a JWK whose x has a stray bit in its last character: refused",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otpt"
+      },
+      "expect": null
+    },
+    {
+      "name": "a JWK whose x is 31 bytes: refused",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBw"
+      },
+      "expect": null
+    },
+    {
+      "name": "a JSON list, not a JWK: refused",
+      "jwk": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "expect": null
+    },
+    {
+      "name": "a JWK whose x is 32 bytes but no point on the curve: a key all the same, with its id",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "expect": "uBQK0GQ72Y2tW9CaUKH9f4UAnZGnMWJPRLpAf74pyjM"
+    },
+    {
+      "name": "a JWK whose use is null: refused",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps",
+        "use": null
+      },
+      "expect": null
+    },
+    {
+      "name": "a JWK whose key_ops are null: refused",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps",
+        "key_ops": null
+      },
+      "expect": null
+    },
+    {
+      "name": "a JWK whose alg is null: refused",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps",
+        "alg": null
+      },
+      "expect": null
+    },
+    {
+      "name": "a JWK whose d is null: refused, a private member at all",
+      "jwk": {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps",
+        "d": null
+      },
+      "expect": null
+    }
+  ],
+  "keySets": [
+    {
+      "name": "a lease naming the current key, signed by it",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6IjQ5UlFDWWxIVzI4TnJSS0x3TXNiNVdKNlhjc1NTVFlnZXltNkI1OUpkWTAifQ.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.PEVoBhh4PZjvjkjuOFE2F1gEMLp5mpvCsXY1-O5uPE0fQF2wNpLvtF4bhqiuyR76w-0jM2GeQ9_DTgTCqKfuDA",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": true,
+        "claims": {
+          "iss": "keygrant",
+          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "product": "sluice",
+          "aid": "act_1",
+          "model": "perpetual",
+          "lim": 3,
+          "major": 3,
+          "ent": {},
+          "iat": 1789913600,
+          "exp": 1792505600
+        }
+      }
+    },
+    {
+      "name": "a lease naming the second key of the set, signed by it",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6IlEzMXotSkZpLVRNVWdzaFpic1FSdTVScm5XMjFVZEdDSFpnVkZwMkU0RHMifQ.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.FZhFIkRV13Nvosg7-WJVC5A-febnEXWXDZZjDRmdNbwc8dPfZo97pbQ6Q1dkmtdblBBUphjuKLkAFDB5xnp8CA",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": true,
+        "claims": {
+          "iss": "keygrant",
+          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "product": "sluice",
+          "aid": "act_1",
+          "model": "perpetual",
+          "lim": 3,
+          "major": 3,
+          "ent": {},
+          "iat": 1789913600,
+          "exp": 1792505600
+        }
+      }
+    },
+    {
+      "name": "a lease naming no key, signed by the first key: each key tried in turn",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.Z1DNP_fiRCmJF9xC4_yjaoF60ghNuFMPUPHaliyPg_aQHTc3BBnL_B3hDDgyGwZ3OVdVPBHdnd0crK6bGLypDA",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": true,
+        "claims": {
+          "iss": "keygrant",
+          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "product": "sluice",
+          "aid": "act_1",
+          "model": "perpetual",
+          "lim": 3,
+          "major": 3,
+          "ent": {},
+          "iat": 1789913600,
+          "exp": 1792505600
+        }
+      }
+    },
+    {
+      "name": "a lease naming no key, signed by the second key: each key tried in turn",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.e9XfwrlnLBE68OIHr_nssh6874K2LIkx5qxFVfmWAfVPIPANEEdcFKZSztcqrswqu-6sLFTqkVqZpm8xeov_Bw",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": true,
+        "claims": {
+          "iss": "keygrant",
+          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "product": "sluice",
+          "aid": "act_1",
+          "model": "perpetual",
+          "lim": 3,
+          "major": 3,
+          "ent": {},
+          "iat": 1789913600,
+          "exp": 1792505600
+        }
+      }
+    },
+    {
+      "name": "a lease naming a key the set does not hold: unknown-key",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImlLdTlvcC1LWkFOTzZPdVdvZ0x5aE5ReXFFT09DU3lWNlVlUnpxdXVoTVUifQ.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.r4a2yu8VBN7uPXD3tIncASugCD1ZTwlOcGJf0kFFLacOUam3zTa1bTYpW7K2RGb7RlTpz5DcZdawZyttxoPbBQ",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": false,
+        "reason": "unknown-key"
+      }
+    },
+    {
+      "name": "a build carrying only the old key, given a lease naming the next one: unknown-key",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6IlEzMXotSkZpLVRNVWdzaFpic1FSdTVScm5XMjFVZEdDSFpnVkZwMkU0RHMifQ.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.FZhFIkRV13Nvosg7-WJVC5A-febnEXWXDZZjDRmdNbwc8dPfZo97pbQ6Q1dkmtdblBBUphjuKLkAFDB5xnp8CA",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0"
+      ],
+      "verify": {
+        "valid": false,
+        "reason": "unknown-key"
+      }
+    },
+    {
+      "name": "a lease naming the second key but signed by the first: verified by the named key only, bad-signature",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6IlEzMXotSkZpLVRNVWdzaFpic1FSdTVScm5XMjFVZEdDSFpnVkZwMkU0RHMifQ.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.2TMCsqmEfRPZj8gjwkz8bMc44IhBy5NsJUqz8IwlbrLH5ccXzOcGNVvDCy8EFgRUhN4h3JUqQ8FzQ_3UQiv6CQ",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": false,
+        "reason": "bad-signature"
+      }
+    },
+    {
+      "name": "a lease naming no key that no key of the set signed: bad-signature",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.xGUfSJ-qJYNJHeBWnJdPj2HV7wGfVqmrvobLJ9xPwoMAOyMnTlwljpVOoV7vhhmdwsMsvpGje9z_UYwkMOGZAQ",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": false,
+        "reason": "bad-signature"
+      }
+    },
+    {
+      "name": "a kid that is a number: names no key, each key tried",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6N30.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.W2XOuId5DewDKHB98KfgluIhuEtB284od-_cVbpa0sw1ESF2mzAtECbXkxx6WFCz-73ywf56AamrVDT_bdaGCw",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": true,
+        "claims": {
+          "iss": "keygrant",
+          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "product": "sluice",
+          "aid": "act_1",
+          "model": "perpetual",
+          "lim": 3,
+          "major": 3,
+          "ent": {},
+          "iat": 1789913600,
+          "exp": 1792505600
+        }
+      }
+    },
+    {
+      "name": "a kid that is null: names no key, each key tried",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6bnVsbH0.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.BxKMixlc_xZPoX6Expwgt_AV3bW4QDivWv0KZRBYh8O4JsQ73BVp0EsRhTuezNUmx5NddGvhHypsunyrodB7Aw",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": true,
+        "claims": {
+          "iss": "keygrant",
+          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "product": "sluice",
+          "aid": "act_1",
+          "model": "perpetual",
+          "lim": 3,
+          "major": 3,
+          "ent": {},
+          "iat": 1789913600,
+          "exp": 1792505600
+        }
+      }
+    },
+    {
+      "name": "a header that is not JSON: names no key, each key tried",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "bm90IGpzb24.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.5ZFz-E2RN66AKGSuR9bIgV44bnEy4ClP7ixQlGS9a9t8kTQZC-Zf0i_zDMN8JabdGjh5IR-4QoDfrp943cbICw",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": true,
+        "claims": {
+          "iss": "keygrant",
+          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "product": "sluice",
+          "aid": "act_1",
+          "model": "perpetual",
+          "lim": 3,
+          "major": 3,
+          "ent": {},
+          "iat": 1789913600,
+          "exp": 1792505600
+        }
+      }
+    },
+    {
+      "name": "a header that is a JSON list: names no key, each key tried",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "WyJRMzF6LUpGaS1UTVVnc2haYnNRUnU1UnJuVzIxVWRHQ0haZ1ZGcDJFNERzIl0.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.MSoWa3e06xU3RbhEOc-A8DDmN1FMBzfheBejsqSDcblpVD_yUS1WwY65ukBTjUUeg7orz4YNzUPgU9ZCDi0NAQ",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": true,
+        "claims": {
+          "iss": "keygrant",
+          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "product": "sluice",
+          "aid": "act_1",
+          "model": "perpetual",
+          "lim": 3,
+          "major": 3,
+          "ent": {},
+          "iat": 1789913600,
+          "exp": 1792505600
+        }
+      }
+    },
+    {
+      "name": "a header naming a key, not canonical base64url: names no key, each key tried",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImlLdTlvcC1LWkFOTzZPdVdvZ0x5aE5ReXFFT09DU3lWNlVlUnpxdXVoTVUifR.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.oXEnXRhtKtPPvkOyGGS-qxu_XUsLmV2xQIXJAyEqJEaxnM6T28woXOBO0NFSiqXA5kGIhj67VI7LlgI3nWMgAg",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": true,
+        "claims": {
+          "iss": "keygrant",
+          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "product": "sluice",
+          "aid": "act_1",
+          "model": "perpetual",
+          "lim": 3,
+          "major": 3,
+          "ent": {},
+          "iat": 1789913600,
+          "exp": 1792505600
+        }
+      }
+    },
+    {
+      "name": "an empty kid: not the form a header names a key in, each key tried",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6IiJ9.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.XsPG5FVBJVbGG6nbL4GzY1AUdbKiJKuBdIYFHk5cYV9Gushi5Q5ypZGFIoFhIYDm64WNBFR9VXOatd7DsXgcBw",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": true,
+        "claims": {
+          "iss": "keygrant",
+          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "product": "sluice",
+          "aid": "act_1",
+          "model": "perpetual",
+          "lim": 3,
+          "major": 3,
+          "ent": {},
+          "iat": 1789913600,
+          "exp": 1792505600
+        }
+      }
+    },
+    {
+      "name": "a kid naming the second key in another case: matched exactly, unknown-key",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6InEzMVotamZJLXRtdUdTSHpCU3FyVTVyUk53MjF1RGdjaHpHdmZQMmU0ZFMifQ.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.7Mzm1EE5hZNRaig68NYgwnkhR8PIlIKCPcIOpIfT_RKJFpNZUa2TaL2vSdJeTdv9ZpCqC9zJ0743OMYiBCR6CA",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": false,
+        "reason": "unknown-key"
+      }
+    },
+    {
+      "name": "a set naming a key twice: kept once, in the order first given",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6IjQ5UlFDWWxIVzI4TnJSS0x3TXNiNVdKNlhjc1NTVFlnZXltNkI1OUpkWTAifQ.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.PEVoBhh4PZjvjkjuOFE2F1gEMLp5mpvCsXY1-O5uPE0fQF2wNpLvtF4bhqiuyR76w-0jM2GeQ9_DTgTCqKfuDA",
+      "now": 1790000000000,
+      "kids": [
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds",
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0"
+      ],
+      "verify": {
+        "valid": true,
+        "claims": {
+          "iss": "keygrant",
+          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "product": "sluice",
+          "aid": "act_1",
+          "model": "perpetual",
+          "lim": 3,
+          "major": 3,
+          "ent": {},
+          "iat": 1789913600,
+          "exp": 1792505600
+        }
+      }
+    },
+    {
+      "name": "an expired lease naming the second key: expired, with its claims",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6IlEzMXotSkZpLVRNVWdzaFpic1FSdTVScm5XMjFVZEdDSFpnVkZwMkU0RHMifQ.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc4OTk5OTk5OX0.zyxDcrqp8iVF-gsG8fJlXWbL-vcCg8YCC0lzNRt7mKTJz84eJUyu5rRUoMZS9uimAaN5N_1RxXHvCs2egNw-Cg",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": false,
+        "reason": "expired",
+        "claims": {
+          "iss": "keygrant",
+          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "product": "sluice",
+          "aid": "act_1",
+          "model": "perpetual",
+          "lim": 3,
+          "major": 3,
+          "ent": {},
+          "iat": 1789913600,
+          "exp": 1789999999
+        }
+      }
+    },
+    {
+      "name": "a lease naming a key the set does not hold, its signature not base64url: malformed first",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImlLdTlvcC1LWkFOTzZPdVdvZ0x5aE5ReXFFT09DU3lWNlVlUnpxdXVoTVUifQ.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.not+base64url",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": false,
+        "reason": "malformed"
+      }
+    },
+    {
+      "name": "a key the set does not hold, named with the members in another order: names no key, each key tried",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "eyJraWQiOiJpS3U5b3AtS1pBTk82T3VXb2dMeWhOUXlxRU9PQ1N5VjZVZVJ6cXV1aE1VIiwiYWxnIjoiRWREU0EiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.ypAw3K0EALEI5etyzEJhBhO5eaa7w_0sk1excePYkP0RM04JSDNmZcpsLQtXnphJil780j85Lt9FFN5HzuflAQ",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": true,
+        "claims": {
+          "iss": "keygrant",
+          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "product": "sluice",
+          "aid": "act_1",
+          "model": "perpetual",
+          "lim": 3,
+          "major": 3,
+          "ent": {},
+          "iat": 1789913600,
+          "exp": 1792505600
+        }
+      }
+    },
+    {
+      "name": "a key the set does not hold, named with a space: names no key, each key tried, bad-signature",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsICJ0eXAiOiJKV1QiLCJraWQiOiJpS3U5b3AtS1pBTk82T3VXb2dMeWhOUXlxRU9PQ1N5VjZVZVJ6cXV1aE1VIn0.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.Q02Cvy-BSuA4NOtvGCcdEUFlWSEiZ7TTBTIMzBxXz2tvOenUk9VhLeBNUPT7QHaQOiHNkcepzqdN2XANW1-JDg",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": false,
+        "reason": "bad-signature"
+      }
+    },
+    {
+      "name": "a key the set does not hold, named with a member more: names no key, each key tried",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImlLdTlvcC1LWkFOTzZPdVdvZ0x5aE5ReXFFT09DU3lWNlVlUnpxdXVoTVUiLCJqa3UiOiJ4In0.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.GzFR4RgBCXwZDTNSEJ6fyxcyX3fMMtZKBzyltqt1SCN5b8kozpZXCxlbwYcW3jXU8mnrYNLNPlaLK2ydBs_uBg",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": true,
+        "claims": {
+          "iss": "keygrant",
+          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "product": "sluice",
+          "aid": "act_1",
+          "model": "perpetual",
+          "lim": 3,
+          "major": 3,
+          "ent": {},
+          "iat": 1789913600,
+          "exp": 1792505600
+        }
+      }
+    },
+    {
+      "name": "a key the set does not hold, named after a byte-order mark: names no key, each key tried",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "77u_eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImlLdTlvcC1LWkFOTzZPdVdvZ0x5aE5ReXFFT09DU3lWNlVlUnpxdXVoTVUifQ.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.bpuo_13ZD-WhruS-WdfRon4Nz83JzCpnuKyJ2Ut7KfrBm4bzujCtj87i-bNnPnZ2DL1dAiRCi0b--cB_uIGbAg",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": true,
+        "claims": {
+          "iss": "keygrant",
+          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "product": "sluice",
+          "aid": "act_1",
+          "model": "perpetual",
+          "lim": 3,
+          "major": 3,
+          "ent": {},
+          "iat": 1789913600,
+          "exp": 1792505600
+        }
+      }
+    },
+    {
+      "name": "a kid with a character outside base64url: names no key, each key tried",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6ImlLdTlvcC1LWkFOTzZPdVdvZ0x5aE5ReXFFT09DU3lWNlVlUnpxdXVoTVUuIn0.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.gLY1Be1gOXoSdZCf-JlAvcnaDeHNFqIL58dYUm1EBqznjv--JIyyl7nkqei_AVB-oby6nlTRMXQLX9Svi0ixBA",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": true,
+        "claims": {
+          "iss": "keygrant",
+          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "product": "sluice",
+          "aid": "act_1",
+          "model": "perpetual",
+          "lim": 3,
+          "major": 3,
+          "ent": {},
+          "iat": 1789913600,
+          "exp": 1792505600
+        }
+      }
+    },
+    {
+      "name": "a kid of 65 characters: names no key, each key tried",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6Imtra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2trIn0.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.jRhwdS0jHYXDHfvIYL4gJmPRLwM4cUaa5XdacgcbeU35wZHSQnGCej29Gr7KOE1uML_rWVDc5jSPxa5R97deBw",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": true,
+        "claims": {
+          "iss": "keygrant",
+          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "product": "sluice",
+          "aid": "act_1",
+          "model": "perpetual",
+          "lim": 3,
+          "major": 3,
+          "ent": {},
+          "iat": 1789913600,
+          "exp": 1792505600
+        }
+      }
+    },
+    {
+      "name": "a kid of 64 characters the set does not hold: unknown-key",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6Imtra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2sifQ.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.CsewEyTjeYSKyaPbvNgQcnC09CG2NkeZqSIL-5yPg2QOfnsUEMJkOj7yJfMJP5Ls71sDUfgFjV1HIcmzW7Q3Dw",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": false,
+        "reason": "unknown-key"
+      }
+    },
+    {
+      "name": "a kid past ASCII (a lone surrogate, written as the replacement character U+FFFD): names no key, each key tried",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6Iu-_vSJ9.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.NX0tRyBLD8v9wvRUNdGBnZgmOc_7H9MzBNAUzrbdrfwzismKpb391lJXybSJ9-S59pzFevcvnnCT4WwyjZB6Aw",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": true,
+        "claims": {
+          "iss": "keygrant",
+          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "product": "sluice",
+          "aid": "act_1",
+          "model": "perpetual",
+          "lim": 3,
+          "major": 3,
+          "ent": {},
+          "iat": 1789913600,
+          "exp": 1792505600
+        }
+      }
+    },
+    {
+      "name": "a header cut off inside its kid: names no key, each key tried",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "5x8AEh6i8eeBZ4Pxc0e3J9wvaG_a13dwSwE-Ii1otps"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6In0.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.mLeNjRxi9wWyvuFhnolIugelFxdF9QKjeqfvwCpiXat51SfalfwPzkfqxLvReO226KFln0CpFMu2hLynC-A6Cw",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0",
+        "Q31z-JFi-TMUgshZbsQRu5RrnW21UdGCHZgVFp2E4Ds"
+      ],
+      "verify": {
+        "valid": true,
+        "claims": {
+          "iss": "keygrant",
+          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "product": "sluice",
+          "aid": "act_1",
+          "model": "perpetual",
+          "lim": 3,
+          "major": 3,
+          "ent": {},
+          "iat": 1789913600,
+          "exp": 1792505600
+        }
+      }
+    },
+    {
+      "name": "a set of one, the single key as before: a lease naming no key",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.Z1DNP_fiRCmJF9xC4_yjaoF60ghNuFMPUPHaliyPg_aQHTc3BBnL_B3hDDgyGwZ3OVdVPBHdnd0crK6bGLypDA",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0"
+      ],
+      "verify": {
+        "valid": true,
+        "claims": {
+          "iss": "keygrant",
+          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "product": "sluice",
+          "aid": "act_1",
+          "model": "perpetual",
+          "lim": 3,
+          "major": 3,
+          "ent": {},
+          "iat": 1789913600,
+          "exp": 1792505600
+        }
+      }
+    },
+    {
+      "name": "a set of one: a lease naming its key",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6IjQ5UlFDWWxIVzI4TnJSS0x3TXNiNVdKNlhjc1NTVFlnZXltNkI1OUpkWTAifQ.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.PEVoBhh4PZjvjkjuOFE2F1gEMLp5mpvCsXY1-O5uPE0fQF2wNpLvtF4bhqiuyR76w-0jM2GeQ9_DTgTCqKfuDA",
+      "now": 1790000000000,
+      "kids": [
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0"
+      ],
+      "verify": {
+        "valid": true,
+        "claims": {
+          "iss": "keygrant",
+          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "product": "sluice",
+          "aid": "act_1",
+          "model": "perpetual",
+          "lim": 3,
+          "major": 3,
+          "ent": {},
+          "iat": 1789913600,
+          "exp": 1792505600
+        }
+      }
+    },
+    {
+      "name": "a set whose first key is no point on the curve, a lease naming no key: that key verifies nothing, the next does",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.Z1DNP_fiRCmJF9xC4_yjaoF60ghNuFMPUPHaliyPg_aQHTc3BBnL_B3hDDgyGwZ3OVdVPBHdnd0crK6bGLypDA",
+      "now": 1790000000000,
+      "kids": [
+        "uBQK0GQ72Y2tW9CaUKH9f4UAnZGnMWJPRLpAf74pyjM",
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0"
+      ],
+      "verify": {
+        "valid": true,
+        "claims": {
+          "iss": "keygrant",
+          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "product": "sluice",
+          "aid": "act_1",
+          "model": "perpetual",
+          "lim": 3,
+          "major": 3,
+          "ent": {},
+          "iat": 1789913600,
+          "exp": 1792505600
+        }
+      }
+    },
+    {
+      "name": "a lease naming the key of the set that is no point on the curve: bad-signature",
+      "keys": [
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "AgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        },
+        {
+          "kty": "OKP",
+          "crv": "Ed25519",
+          "x": "Ohg4h8SrYQ0m1su_zVacJLLwf_6rNsvOtV5oWY6CzJs"
+        }
+      ],
+      "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6InVCUUswR1E3MlkydFc5Q2FVS0g5ZjRVQW5aR25NV0pQUkxwQWY3NHB5ak0ifQ.eyJpc3MiOiJrZXlncmFudCIsInN1YiI6IlNMVUlDRS1BQUFBLUJCQkItQ0NDQy1EREREIiwicHJvZHVjdCI6InNsdWljZSIsImFpZCI6ImFjdF8xIiwibW9kZWwiOiJwZXJwZXR1YWwiLCJsaW0iOjMsIm1ham9yIjozLCJlbnQiOnt9LCJpYXQiOjE3ODk5MTM2MDAsImV4cCI6MTc5MjUwNTYwMH0.kjJngzl7lUuXkUVA0nbEaQfUTA_nQB3duewVCO5MLfoq6SDk41iDH-48EVRHt8VlP7SebzDXaj8ChD5EO94IDg",
+      "now": 1790000000000,
+      "kids": [
+        "uBQK0GQ72Y2tW9CaUKH9f4UAnZGnMWJPRLpAf74pyjM",
+        "49RQCYlHW28NrRKLwMsb5WJ6XcsSSTYgeym6B59JdY0"
+      ],
+      "verify": {
+        "valid": false,
+        "reason": "bad-signature"
+      }
+    }
+  ],
+  "grants": [
+    {
+      "name": "a flag that is on",
+      "ent": {
+        "cloud": true,
+        "beta": false,
+        "seats": 5,
+        "none": 0,
+        "unlimited": -1,
+        "share": 0.5,
+        "edition": "pro",
+        "blank": "",
+        "édition": "studio"
+      },
+      "code": "cloud",
+      "expect": true
+    },
+    {
+      "name": "a flag that is off",
+      "ent": {
+        "cloud": true,
+        "beta": false,
+        "seats": 5,
+        "none": 0,
+        "unlimited": -1,
+        "share": 0.5,
+        "edition": "pro",
+        "blank": "",
+        "édition": "studio"
+      },
+      "code": "beta",
+      "expect": false
+    },
+    {
+      "name": "a number that is not zero",
+      "ent": {
+        "cloud": true,
+        "beta": false,
+        "seats": 5,
+        "none": 0,
+        "unlimited": -1,
+        "share": 0.5,
+        "edition": "pro",
+        "blank": "",
+        "édition": "studio"
+      },
+      "code": "seats",
+      "expect": true
+    },
+    {
+      "name": "a number that is zero",
+      "ent": {
+        "cloud": true,
+        "beta": false,
+        "seats": 5,
+        "none": 0,
+        "unlimited": -1,
+        "share": 0.5,
+        "edition": "pro",
+        "blank": "",
+        "édition": "studio"
+      },
+      "code": "none",
+      "expect": false
+    },
+    {
+      "name": "a negative number",
+      "ent": {
+        "cloud": true,
+        "beta": false,
+        "seats": 5,
+        "none": 0,
+        "unlimited": -1,
+        "share": 0.5,
+        "edition": "pro",
+        "blank": "",
+        "édition": "studio"
+      },
+      "code": "unlimited",
+      "expect": true
+    },
+    {
+      "name": "a fraction",
+      "ent": {
+        "cloud": true,
+        "beta": false,
+        "seats": 5,
+        "none": 0,
+        "unlimited": -1,
+        "share": 0.5,
+        "edition": "pro",
+        "blank": "",
+        "édition": "studio"
+      },
+      "code": "share",
+      "expect": true
+    },
+    {
+      "name": "a text that is not empty",
+      "ent": {
+        "cloud": true,
+        "beta": false,
+        "seats": 5,
+        "none": 0,
+        "unlimited": -1,
+        "share": 0.5,
+        "edition": "pro",
+        "blank": "",
+        "édition": "studio"
+      },
+      "code": "edition",
+      "expect": true
+    },
+    {
+      "name": "an empty text",
+      "ent": {
+        "cloud": true,
+        "beta": false,
+        "seats": 5,
+        "none": 0,
+        "unlimited": -1,
+        "share": 0.5,
+        "edition": "pro",
+        "blank": "",
+        "édition": "studio"
+      },
+      "code": "blank",
+      "expect": false
+    },
+    {
+      "name": "a code the entitlements do not hold",
+      "ent": {
+        "cloud": true,
+        "beta": false,
+        "seats": 5,
+        "none": 0,
+        "unlimited": -1,
+        "share": 0.5,
+        "edition": "pro",
+        "blank": "",
+        "édition": "studio"
+      },
+      "code": "export",
+      "expect": false
+    },
+    {
+      "name": "a code in another case than the one signed",
+      "ent": {
+        "cloud": true,
+        "beta": false,
+        "seats": 5,
+        "none": 0,
+        "unlimited": -1,
+        "share": 0.5,
+        "edition": "pro",
+        "blank": "",
+        "édition": "studio"
+      },
+      "code": "Cloud",
+      "expect": false
+    },
+    {
+      "name": "a code beyond ASCII, matched exactly",
+      "ent": {
+        "cloud": true,
+        "beta": false,
+        "seats": 5,
+        "none": 0,
+        "unlimited": -1,
+        "share": 0.5,
+        "edition": "pro",
+        "blank": "",
+        "édition": "studio"
+      },
+      "code": "édition",
+      "expect": true
+    },
+    {
+      "name": "an object member name that is not signed (constructor)",
+      "ent": {
+        "cloud": true,
+        "beta": false,
+        "seats": 5,
+        "none": 0,
+        "unlimited": -1,
+        "share": 0.5,
+        "edition": "pro",
+        "blank": "",
+        "édition": "studio"
+      },
+      "code": "constructor",
+      "expect": false
+    },
+    {
+      "name": "a malformed member, dropped when read: not granted",
+      "ent": {
+        "nested": {
+          "on": true
+        },
+        "list": [
+          true
+        ]
+      },
+      "code": "nested",
+      "expect": false
+    },
+    {
+      "name": "entitlements that are not an object: none granted",
+      "ent": [
+        "cloud"
+      ],
+      "code": "cloud",
+      "expect": false
+    },
+    {
+      "name": "no entitlements at all",
+      "ent": {},
+      "code": "cloud",
+      "expect": false
     }
   ]
 }
