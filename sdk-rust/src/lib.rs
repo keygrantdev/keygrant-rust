@@ -3,8 +3,8 @@
 //! A licence is proven to the app by a signed JWT lease (EdDSA / Ed25519)
 //! that the app verifies OFFLINE against the product's public key. The app
 //! only phones home to activate, to renew a lease near or past its end, to
-//! report a newer major version, to pick up a key bought through
-//! `purchase_url`, or to report a running trial's launch (at most once a day).
+//! report a newer major version, or to report a running trial's launch (at
+//! most once a day).
 //!
 //! **Licensing failure fails in favour of the paying customer.** An outage, no
 //! network, a 5xx, a 429, an ambiguous 4xx or an unusable body never locks
@@ -33,7 +33,6 @@
 
 mod adapters;
 mod bounded;
-mod claim_body;
 mod config;
 #[doc(hidden)]
 pub mod device;
@@ -48,9 +47,6 @@ mod license;
 pub mod machine_id;
 #[doc(hidden)]
 pub mod offline;
-#[doc(hidden)]
-pub mod pickup;
-mod purchases;
 mod registry;
 #[doc(hidden)]
 pub mod renewal;
@@ -59,7 +55,8 @@ mod state;
 mod status;
 pub mod storage;
 mod trials;
-mod url;
+#[doc(hidden)]
+pub mod url;
 #[doc(hidden)]
 pub mod wire;
 

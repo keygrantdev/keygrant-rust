@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0
+
+- `License::purchase_url` is removed, with `Error::Random` and the `getrandom` dependency, and the SDK no
+  longer asks for a bought key at `status()`, `refresh()` or `start_trial()`. To sell from the app, open your
+  Payment Link from your own Buy button; the customer types the key from the delivery email (`activate`). A
+  purchase secret an earlier version stored is ignored, and left out the next time the SDK saves its state.
+- `StoredState` no longer has `purchase_token`, `purchase_token_at` or `claim_asked_at`: a storage adapter or
+  test code that sets them stops compiling, and the same names among its `extra` fields are never written.
+
 ## 0.3.0
 
 - Key sets: `LicenseConfig::public_jwk` takes the product's key set (`{"keys":[...]}`, as `/pubkey`

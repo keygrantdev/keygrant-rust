@@ -27,7 +27,6 @@ use crate::offline::{
     check_lease, guarded_now, major_of, merged, saved_last_seen, trial_lease_of, Basis, LeaseCheck,
     LeaseHolder, TrialLease,
 };
-use crate::pickup::RandomSource;
 use crate::serial::Serial;
 use crate::state::{Patch, StoredState};
 use crate::status::{DeviceKind, LicenseStatus};
@@ -79,8 +78,6 @@ pub(crate) struct Engine {
     http_timeout: Duration,
     device_hold: bool,
     pub timings: Timings,
-    /// Where a purchase secret's bytes come from.
-    pub(crate) random: RandomSource,
     serial: Serial,
 }
 
@@ -153,7 +150,6 @@ impl Engine {
             http_timeout: config.http_timeout,
             device_hold: config.device_hold,
             timings: config.timings,
-            random: config.random,
             serial: Serial::new(),
         })
     }
@@ -162,18 +158,10 @@ impl Engine {
     /// (see `serial.rs`); `work` is told whether it must write nothing. The
     /// calls behind it wait for it up to the HTTP bound and the lock grace.
     pub fn serial<T>(&self, work: impl FnOnce(bool) -> T) -> T {
-        self.serial_longer(Duration::ZERO, work)
-    }
-
-    /// [`serial`](Self::serial), for a call that may make a second request
-    /// bounded by `extra` (`start_trial()`: a claim, then its trial ask): the
-    /// calls behind it wait that much longer.
-    pub fn serial_longer<T>(&self, extra: Duration, work: impl FnOnce(bool) -> T) -> T {
-        let bound = self
-            .http_timeout
-            .saturating_add(self.timings.lock_grace)
-            .saturating_add(extra);
-        self.serial.run(bound, work)
+        self.serial.run(
+            self.http_timeout.saturating_add(self.timings.lock_grace),
+            work,
+        )
     }
 
     /// POST to the product's endpoint, ALWAYS bounded: by `timeout`, else by

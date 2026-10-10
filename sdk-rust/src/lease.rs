@@ -25,9 +25,9 @@ mod keys;
 #[cfg(test)]
 mod tests;
 
+pub(crate) use base64::b64url_decode_canonical;
 #[cfg(test)]
-use base64::b64url_decode;
-pub(crate) use base64::{b64url_decode_canonical, b64url_encode};
+use base64::{b64url_decode, b64url_encode};
 use claims::parse_claims;
 pub use claims::{entitlements_of, grants, Entitlement, LeaseClaims, LicenseModel};
 use keys::kid_of;

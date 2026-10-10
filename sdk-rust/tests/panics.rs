@@ -144,10 +144,6 @@ fn a_storage_adapter_that_panics_on_read_is_a_state_that_cannot_be_read() {
         license.upgrade_url("https://buy.test/x"),
         Err(Error::Storage(_))
     ));
-    assert!(matches!(
-        license.purchase_url("https://buy.test/x"),
-        Err(Error::Storage(_))
-    ));
     assert!(http.calls().is_empty());
 }
 

@@ -1,7 +1,9 @@
 //! What of a save lands on a state another process changed meanwhile.
 
-use crate::pickup::{about_stored, PurchaseOf, PURCHASE_FIELDS};
+use super::kept_with;
+use crate::lease::LeaseClaims;
 use crate::state::{Patch, StoredState};
+use crate::status::DeviceKind;
 use crate::wire::earliest;
 
 /// When something was asked of the server (guarded device clock, ms), and the
@@ -43,12 +45,6 @@ pub struct Basis {
     pub about: Option<About>,
     /// The server's answer to a trial ask: stamped `trialAt`.
     pub trial: Option<Stamp>,
-    /// A save about a purchase secret (its drop, or the wait after a claim
-    /// ask): its purchase fields land only while that secret is the one
-    /// stored, so one another process made meanwhile is neither dropped nor
-    /// stamped by it; a wait, only while its link is as handed out when it
-    /// was asked ([`PurchaseOf::at`]).
-    pub purchase: Option<PurchaseOf>,
 }
 
 /// What the answer to an ask writes: what the server said, and the wait.
@@ -131,10 +127,8 @@ fn out_of_date(latest: &StoredState, basis: &Basis) -> Option<Superseded> {
 /// answer or activation stamped `verdictAt`, a trial answer `trialAt`; a save
 /// about an activation no longer stored keeps only its trial evidence; an
 /// answer older than the stored one loses its verdict fields; an older trial
-/// answer loses its end and lease; a save about a purchase secret no longer
-/// stored (or, for a wait, one whose link was handed out again since) loses
-/// its purchase fields; the trial start only ever moves earlier; the kept
-/// major of the stored activation only ever up.
+/// answer loses its end and lease; the trial start only ever moves earlier;
+/// the kept major of the stored activation only ever up.
 pub fn merged(latest: &StoredState, patch: &Patch, basis: &Basis) -> StoredState {
     let stamp = basis.answer.as_ref().or(basis.activation.as_ref());
     let mut applied = patch.clone();
@@ -152,11 +146,6 @@ pub fn merged(latest: &StoredState, patch: &Patch, basis: &Basis) -> StoredState
     if let Some(trial) = &basis.trial {
         if outdated(latest.trial_at, trial) {
             applied = applied.retain(|field| !TRIAL_ANSWER_FIELDS.contains(&field));
-        }
-    }
-    if let Some(purchase) = &basis.purchase {
-        if !about_stored(latest, purchase) {
-            applied = applied.retain(|field| !PURCHASE_FIELDS.contains(&field));
         }
     }
     let trial_start = earliest(&[latest.trial_start, applied.trial_start.flatten()]);
@@ -203,4 +192,44 @@ pub fn unkeyed() -> Patch {
         ..Patch::default()
     }
     .then(leased())
+}
+
+/// An activation the server answered with a lease that licenses this build
+/// ([`activation_patch`]).
+#[derive(Debug, Clone, Copy)]
+pub struct Activation<'a> {
+    /// The key.
+    pub key: &'a str,
+    /// This device's activation on it.
+    pub activation_id: &'a str,
+    /// The lease.
+    pub lease: &'a str,
+    /// The lease's claims.
+    pub claims: &'a LeaseClaims,
+    /// The time the lease was judged at.
+    pub now: i64,
+    /// This build's major.
+    pub major: i64,
+    /// What the activation's fingerprint hashes: none for one of unknown kind.
+    pub kind: Option<DeviceKind>,
+}
+
+/// What an activation saves, stamped as an activation: the key, the
+/// activation, the lease, the major heard, the kept major (`kept_with`), any
+/// refusal and wait cleared (`leased`), and what the install is keyed by
+/// (cleared for a fingerprint of unknown kind).
+pub fn activation_patch(a: &Activation<'_>) -> Patch {
+    Patch {
+        key: Some(Some(a.key.to_owned())),
+        activation_id: Some(Some(a.activation_id.to_owned())),
+        lease: Some(Some(a.lease.to_owned())),
+        checked_major: Some(Some(a.major)),
+        kept_major: Some(kept_with(None, a.claims.upgrade_until, a.now, a.major)),
+        ..Patch::default()
+    }
+    .then(leased())
+    .then(Patch {
+        device_kind: Some(a.kind),
+        ..Patch::default()
+    })
 }

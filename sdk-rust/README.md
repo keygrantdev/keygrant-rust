@@ -5,8 +5,8 @@ KeyGrant licensing for **Tauri** and native **Rust** desktop apps.
 A licence is proven to the app by a signed JWT lease (JWS, EdDSA / Ed25519)
 that the app verifies **offline** against the product's public key. The app
 only phones home to activate, to renew a lease near or past its end, to tell
-the server about a newer major version, to pick up a key bought through
-`purchase_url`, or to report a running trial's launch (at most once a day).
+the server about a newer major version, or to report a running trial's launch
+(at most once a day).
 
 **Licensing failure fails in favour of the paying customer.** An outage, no
 network, a timeout, a 5xx, a 429, an ambiguous 4xx or a body the SDK cannot use
@@ -28,7 +28,7 @@ The full guide is at https://keygrant.dev/docs.
 
 ```toml
 [dependencies]
-keygrant = "0.2"
+keygrant = "0.4"
 ```
 
 or `cargo add keygrant`.
@@ -36,8 +36,7 @@ or `cargo add keygrant`.
 It needs Rust 1.86 or later. Its dependencies are `ed25519-dalek`, `sha2`,
 `serde`/`serde_json` (with `float_roundtrip`, so a number in a lease is read
 as the same double as JavaScript reads it; Cargo turns the feature on for
-the app's own `serde_json` too), `getrandom` 0.2 (the platform's CSPRNG, for
-a purchase secret) and `ureq` 3 (rustls); `winreg` and `whoami` on Windows,
+the app's own `serde_json` too) and `ureq` 3 (rustls); `winreg` and `whoami` on Windows,
 `hostname` elsewhere. The crate itself forbids `unsafe`.
 
 ## Embedding the public keys
@@ -66,7 +65,7 @@ still signed with the current key. Ship builds carrying both; once they are
 out, the product *switches*, and those builds verify every lease signed after
 it. Embed the whole set each time you build.
 
-Each activation, validate and claim reports the ids of the keys the build
+Each activation and validate reports the ids of the keys the build
 carries (`kids`), so the dashboard can count the devices still on builds
 without the staged key before you switch.
 
@@ -185,81 +184,19 @@ unchanged:
 
 ## Buying from the app
 
-A customer with no key buys through `purchase_url`. Once they are back from
-the checkout, the app picks the key bought there up, activates this device on
-it and answers `Licensed`, with nothing typed:
+Give a customer who holds no key a Buy button that opens your Stripe Payment
+Link (with the app's own way to open a URL: tauri-plugin-opener, the `open`
+crate, ...). The checkout emails them their key, and they type it into the
+app:
 
 ```rust
-use std::sync::atomic::{AtomicBool, Ordering};
-
-use keygrant::{License, LicenseState};
-
-const PAYMENT_LINK: &str = "https://buy.stripe.com/your_link";
-static CHECKOUT_OPENED: AtomicBool = AtomicBool::new(false);
-
-/// The "Buy" button. `open_in_browser` is the app's own way to open a URL
-/// (tauri-plugin-opener, the `open` crate, ...).
-fn buy(license: &License, open_in_browser: impl Fn(&str)) -> Result<(), keygrant::Error> {
-    match license.purchase_url(PAYMENT_LINK)? {
-        Some(url) => {
-            open_in_browser(&url);
-            CHECKOUT_OPENED.store(true, Ordering::SeqCst);
-        }
-        // A key is held: offer `upgrade_url` instead, or the plain link.
-        None => open_in_browser(PAYMENT_LINK),
-    }
-    Ok(())
-}
-
-/// When the customer is back (the window regains focus, say), and only while
-/// a checkout is open: `refresh()` on a licensed install validates online
-/// every time.
-fn returned(license: &License) {
-    if CHECKOUT_OPENED.load(Ordering::SeqCst)
-        && license.status(false).state != LicenseState::Licensed
-        && license.refresh().state == LicenseState::Licensed
-    {
-        CHECKOUT_OPENED.store(false, Ordering::SeqCst);
-    }
-}
+// Once they have the key from the email:
+license.activate(&entered_key)?;
 ```
 
-- **How:** `purchase_url` keeps a one-time secret for this install (256 bits
-  from the platform's CSPRNG, never the device's fingerprint) and sets the
-  link's `client_reference_id` to a hash of it (`kgp_` and the base64url of
-  the SHA-256 of its UTF-8 bytes), so a link that leaks (browser history, a screenshot) claims
-  nothing. The checkout keeps that reference on the key it mints, and the SDK
-  asks for the key with the secret: at once on `refresh()` or
-  `start_trial()`, and from `status()` at most every five minutes for a day
-  after the link (after that, `refresh()` or `start_trial()` still ask).
-  `status()` and `refresh()` ask only under this device's own fingerprint;
-  `start_trial()` may fall back to the host name, as an activation does.
-  Until the key is bought, the status is what it was (the trial, or
-  `Unlicensed`).
-- **Calling it again** hands out the same secret's link, so the key bought
-  through either link is picked up (paying twice buys two keys; the second
-  comes by email). A secret is dropped 30 days after the last link, once its
-  key is picked up, when the product's "Converts in place" switch is off or
-  another device took the key (the customer then types the key from the
-  delivery email), and by a typed activation or `deactivate()`. A drop is
-  this device's alone: it revokes nothing on the server.
-- **It fails** when the link is not an absolute `http(s)` URL, or when the
-  secret cannot be saved (a link whose secret is lost could never be picked
-  up).
-- **What the ask sends:** the secret, the fingerprint it is made under, and
-  every fingerprint the run read (its own first, then the host name and any
-  other alternates, whether or not the device is held), keeping those of 1 to
-  200 UTF-16 units and the first 4 of them, as the server takes them.
-- **Turn the product's "Converts in place" switch on** once your app uses
-  `purchase_url`: it is off by default, and until it is on every pickup is
-  refused and the customer types the key from the delivery email. Know the
-  trade before you do: whoever opens a checkout owns its pickup. Your Payment
-  Link is public, so anyone can add a `client_reference_id` of their own to
-  it and get buyers to pay through their copy of the link; the key bought
-  that way is picked up by the link's maker, not the buyer. A link from the
-  app is the buyer's own; a leaked one claims nothing, as it carries only a
-  hash of the app's secret. A planted pickup shows in the key's history, and
-  you can free the seat for the buyer.
+For a customer who already holds a key, `upgrade_url(link)` adds this
+install's activation to the link, so an upgrade sale finds the key it
+upgrades.
 
 ## The API
 
@@ -270,9 +207,8 @@ fn returned(license: &License) {
 | `refresh()` | `status(true)`: asks the server at once, whatever the waits say. Call it when the customer says they have paid. |
 | `activate(key)` | Activates the key on this device. The key is trimmed and upper-cased first. `Err(ActivateError::License(_))` or `Err(ActivateError::Storage(_))`. |
 | `deactivate()` | Releases the seat and drops the local licence, keeping the trial evidence. `Ok(DeactivateResult { released })`: `released` is true when KeyGrant answered the release with a 200, or when there was no activation to release; false when it could not be asked or answered anything else (a 5xx, a 429, a proxy's page), so the seat may still be held and the app should say so. The local licence is dropped either way. An activation that is another device's (a state file copied or restored from another PC: a device refusal that stands for this device, or a lease, expired or not, held to a machine id this device can tell is not its own) is never released, as releasing it would lock that PC out: it is dropped here, and the answer is `released: true`. `Err(Error::Busy)` behind a call that has not finished, and `Err(Error::Storage(_))` when the state cannot be read, release nothing. `Err(Error::Storage(_))` when the state cannot be saved comes after the release was asked for: the seat may already be free while the device still holds the key, so try again (the release is idempotent: the retry answers `released: true` and drops the key). |
-| `start_trial()` | Reads the device once, for both its asks. With no key held and a purchase secret held, first asks for the key bought with it (bounded to 5 seconds): bought, that is the answer (`Licensed`) and no trial is asked. Then starts (or re-syncs) this device's trial. Never fails; the server's trial is answered even when it cannot be saved. An answer whose trial lease this build cannot verify (signed with a key the product rotated to ahead of this build) never replaces a stored trial lease it can: the stored one is kept, so the running trial does not end. An answer with no lease (the trial is over) is taken as it is. |
+| `start_trial()` | Starts (or re-syncs) this device's trial. Never fails; the server's trial is answered even when it cannot be saved. An answer whose trial lease this build cannot verify (signed with a key the product rotated to ahead of this build) never replaces a stored trial lease it can: the stored one is kept, so the running trial does not end. An answer with no lease (the trial is over) is taken as it is. |
 | `upgrade_url(link)` | The payment link with this device's **activation id** (never the key) as `client_reference_id`, so an upgrade checkout extends the key the customer holds. `Ok(None)` without an activation. |
-| `purchase_url(link)` | The payment link with the **reference** to this install's one-time purchase secret (never the secret itself) as `client_reference_id` (see "Buying from the app"). `Ok(None)` while any key is held. `Err(Error::InvalidUrl)` for a link that is not an absolute `http(s)` URL (before anything is read), `Err(Error::Storage(_))` when the state cannot be read or the secret cannot be saved, `Err(Error::Random(_))` when the platform's random source fails. |
 
 ### Configuration
 
@@ -336,12 +272,7 @@ answered without a lease (a refusal, a 5xx, a 429, an unusable body), or
 without a trial this build can verify. Any lease ends the wait; a clock set
 back asks at once; `refresh()` always asks.
 
-With no key held and a purchase secret held (`purchase_url`), it asks for
-the key bought with it (bounded to 5 seconds; `refresh()` under the HTTP
-bound), when forced, or for a day after the link 5 minutes after its last ask
-that brought no key, and only under this device's own fingerprint (one that
-does not read this time sends nothing and starts no wait); a bought key is
-the answer. And a running trial reports its launch (`trial`, the body
+A running trial reports its launch (`trial`, the body
 `start_trial()` sends) at most once a day, a `start_trial()` answer counting
 as one: its stamp saved first (nothing is sent when it cannot be), then the
 request made on a thread of its own, bounded to 5 seconds, never waited on,
@@ -352,12 +283,11 @@ its answer not read and every failure ignored.
 Calls on one `License` run one after another, so `status()` from several
 threads asks the server once and never writes back a stale state. A call waits
 for the one before it, but at most `http_timeout` + 15 s from when that one
-started (5 s more after a `start_trial()`, which may make two requests). Storage adapters are not cut short (a write cut short could be left
+started. Storage adapters are not cut short (a write cut short could be left
 half-written), so a call stuck on one is left to finish, and the calls behind
 it run read-only until it does: `status()` answers from storage with
 `stalled: true`, `activate()` answers `network`, `start_trial()` the stored
-trial, `deactivate()` fails with `Error::Busy`, and `purchase_url()` answers a
-held secret's link as it is (none held: `Error::Busy`).
+trial, and `deactivate()` fails with `Error::Busy`.
 
 ## Holding a licence to its device: `device_hold`
 
@@ -541,10 +471,9 @@ the status a stored licence lease or trial gives with no verdict from the
 server, entitlements included (`lease_status`, `trial_lease_of` and
 `trial_status_of`), and the double an entitlement number reads as
 (`lease::entitlements_of`), as well as the lease checks, the patches, the merge,
-the clock guard, the wire and the machine-id reads, and the purchase from the
-trial (`major_of`, `purchase_reference`, `purchase_link`, `purchase_token_kept`,
-`claim_due`, `parse_claim_body`, `claim_outcome`, `trial_report_due` and the
-claim's body, `claim_request`, answered in `tests/conformance/purchase.rs`). A
+the clock guard, the wire and the machine-id reads, and the groups after them
+(`major_of`, `referenced_link` and `trial_report_due`, answered in
+`tests/conformance/later.rs`). A
 status's entitlement numbers are compared as numbers, as the file says (`5` and
 `5.0` alike), and exactly: the `entitlementNumbers` group pins the bits each
 number written as the server writes it must read as, and the harness checks
@@ -572,9 +501,7 @@ the reasons below.
   returns an `Err`: `activate()` gives `ActivateError::Storage` where the
   reference rejects with the file's error, `deactivate()` gives
   `Error::Storage` or `Error::Busy` ("a previous licence call has not
-  finished"), `upgrade_url()` gives `Error::Storage` or `Error::InvalidUrl`,
-  and `purchase_url()` gives `Error::InvalidUrl`, `Error::Storage`,
-  `Error::Busy` or `Error::Random`.
+  finished"), and `upgrade_url()` gives `Error::Storage` or `Error::InvalidUrl`.
 - A running trial's launch report is sent on a thread of its own (the
   reference sends it as a promise it never awaits). The thread shares the
   `License`'s adapters, all `Send + Sync`; a test waits for it through a
@@ -667,13 +594,13 @@ the reasons below.
   signer refuses an entitlement name or text with a lone surrogate and an
   entitlement number that is not finite, `ent` is flat, and every other claim
   is one the server writes itself.
-- `upgrade_url` and `purchase_url` edit the link without a full WHATWG URL
-  parser: they take an absolute `http`/`https` URL with a host (the reference
-  takes any absolute URL), lower-case the scheme and host, drop a default
-  port, give an empty path `/`, write the query and fragment percent-encoded
-  as the URL parser writes them, and then edit the query as text, as the
-  reference does. They do not punycode a host or percent-encode a path, as a
-  Stripe payment link never needs either.
+- `upgrade_url` edits the link without a full WHATWG URL parser: it takes an
+  absolute `http`/`https` URL with a host (the reference takes any absolute
+  URL), lower-cases the scheme and host, drops a default port, gives an empty
+  path `/`, writes the query and fragment percent-encoded as the URL parser
+  writes them, and then edits the query as text, as the reference does. It
+  does not punycode a host or percent-encode a path, as a Stripe payment link
+  never needs either.
 
 **The machine-id vectors.** The `machineIds` group scripts the reference's
 reads, `reg.exe` among them. This crate reads `MachineGuid` through the

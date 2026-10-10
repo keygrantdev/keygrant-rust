@@ -1,6 +1,6 @@
 [package]
 name = "keygrant"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.86"
 description = "KeyGrant licensing for Tauri and native Rust desktop apps: signed leases verified offline, failing in favour of the paying customer."
@@ -15,8 +15,6 @@ categories = ["authentication"]
 
 [dependencies]
 ed25519-dalek = "2"
-# The platform's CSPRNG, for a purchase token (already in the tree under ring).
-getrandom = "0.2"
 serde = { version = "1", features = ["derive"] }
 # Numbers read correctly rounded (the nearest double), as JavaScript reads them: the default reader
 # can land one double off, and an entitlement number must be the same double here as in every other

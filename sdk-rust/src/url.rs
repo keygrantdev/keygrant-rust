@@ -1,6 +1,5 @@
 //! The one URL edit the SDK makes: a payment link with its one
-//! `client_reference_id`, which `purchase_url` and `upgrade_url` both build
-//! their links with.
+//! `client_reference_id`, which `upgrade_url` builds its link with.
 
 /// The query parameter a payment link names its checkout's buyer by.
 const REFERENCE: &str = "client_reference_id";
@@ -39,12 +38,6 @@ pub fn referenced_link(link: &str, reference: &str) -> Option<String> {
         url.path,
         parts.join("&")
     ))
-}
-
-/// Whether `link` is an absolute `http`/`https` URL with a host, as
-/// [`referenced_link`] takes it.
-pub(crate) fn is_absolute_link(link: &str) -> bool {
-    AbsoluteUrl::parse(link).is_some()
 }
 
 /// An absolute `http`/`https` URL, split into its parts.
@@ -148,7 +141,7 @@ fn encode_uri_component(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_absolute_link, referenced_link};
+    use super::referenced_link;
 
     #[test]
     fn sets_the_reference_and_keeps_the_rest_as_written() {
@@ -192,8 +185,7 @@ mod tests {
             "ftp://x/y",
         ] {
             assert_eq!(referenced_link(link, "a"), None, "{link}");
-            assert!(!is_absolute_link(link), "{link}");
         }
-        assert!(is_absolute_link("https://buy.stripe.com/x"));
+        assert!(referenced_link("https://buy.stripe.com/x", "a").is_some());
     }
 }

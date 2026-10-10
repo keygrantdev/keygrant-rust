@@ -1212,3 +1212,66 @@ fn reads_windows_sharing_and_lock_violations_as_busy_and_tries_the_rename_again(
     );
     assert_eq!(memory.names(), [state_path()]);
 }
+
+// --- what an earlier version stored and this one retired ------------------------------
+
+/// What an earlier version stored to buy from the app with no key typed.
+const RETIRED: &str = r#""purchaseToken":"q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c","purchaseTokenAt":1756913600000,"claimAskedAt":1756999940000"#;
+
+#[test]
+fn a_purchase_secret_an_earlier_version_stored_is_not_read_while_a_later_version_s_field_is_kept() {
+    let value = parse(&format!(
+        r#"{{"trialStart":1756740800000,{RETIRED},"later":{{"n":1}}}}"#
+    ));
+    let state = StoredState::from_json(&value).expect("a state");
+    assert_eq!(
+        state.to_json(),
+        json!({ "trialStart": 1_756_740_800_000_i64, "later": { "n": 1 } })
+    );
+}
+
+#[test]
+fn a_purchase_secret_an_earlier_version_stored_is_cleared_from_the_file_by_the_next_save() {
+    let dir = tempfile::tempdir().expect("a temp folder");
+    let path = dir.path().join("sluice.json");
+    std::fs::write(
+        &path,
+        format!(r#"{{"trialStart":1756740800000,{RETIRED},"rev":3}}"#),
+    )
+    .expect("an earlier version's file");
+    let storage = FileStorage::new(&path);
+    storage
+        .update(&|latest: StoredState| StoredState {
+            trial_reported_at: Some(1_757_000_000_000),
+            ..latest
+        })
+        .expect("the default storage merges")
+        .expect("saved");
+    assert_eq!(
+        parse(&std::fs::read_to_string(&path).expect("the state")),
+        json!({ "trialStart": 1_756_740_800_000_i64, "trialReportedAt": 1_757_000_000_000_i64, "rev": 4 })
+    );
+}
+
+#[test]
+fn a_purchase_secret_set_among_the_extra_fields_by_hand_is_never_written() {
+    let mut state = StoredState {
+        trial_start: Some(1_756_740_800_000),
+        ..StoredState::default()
+    };
+    state.extra.insert(
+        "purchaseToken".to_owned(),
+        json!("q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c"),
+    );
+    state
+        .extra
+        .insert("purchaseTokenAt".to_owned(), json!(1_756_913_600_000_i64));
+    state
+        .extra
+        .insert("claimAskedAt".to_owned(), json!(1_756_999_940_000_i64));
+    state.extra.insert("later".to_owned(), json!({ "n": 1 }));
+    assert_eq!(
+        state.to_json(),
+        json!({ "trialStart": 1_756_740_800_000_i64, "later": { "n": 1 } })
+    );
+}

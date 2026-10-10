@@ -314,6 +314,52 @@ fn status_is_licensed_from_a_valid_lease_without_contacting_the_server() {
 }
 
 #[test]
+fn status_licenses_a_typed_key_whose_lease_is_a_trial_models_offline_never_as_a_device_trial() {
+    let h = Harness::empty();
+    let lease = h.lease("KEY-1", "trial", 30 * 86_400, NOW);
+    h.set_state(licensed("KEY-1", &lease));
+    h.http.fail(true);
+    assert_eq!(h.license.status(false), licensed_as("KEY-1"));
+    h.license.launch_report_settled();
+    assert!(h.http.calls().is_empty());
+    assert!(h.state().trial_lease.is_none());
+}
+
+#[test]
+fn every_answer_parser_ignores_members_it_does_not_know() {
+    let extra = json!({ "future": { "nested": [1, 2] }, "note": "added by a later server" });
+    let with_extra = |answer: Value| {
+        let mut answer = answer;
+        for (name, value) in extra.as_object().expect("an object") {
+            answer[name] = value.clone();
+        }
+        answer
+    };
+    let h = Harness::empty();
+    let lease = h.lease("KEY-1", "perpetual", 30 * 86_400, NOW);
+    h.http.answer(
+        "activate",
+        200,
+        with_extra(json!({ "lease": lease, "activationId": "act_1" })),
+    );
+    h.http
+        .answer("validate", 200, with_extra(json!({ "lease": lease })));
+    h.license.activate("KEY-1").expect("activated");
+    assert_eq!(h.license.refresh(), licensed_as("KEY-1"));
+
+    let trial = Harness::empty();
+    let trial_lease = trial.lease("trial:fp-test", "trial", 5 * 86_400, NOW);
+    trial.http.answer(
+        "trial",
+        200,
+        with_extra(
+            json!({ "trialStart": NOW, "trialEndsAt": NOW + 5 * DAY, "lease": trial_lease }),
+        ),
+    );
+    assert_eq!(trial.license.start_trial().state, LicenseState::Trial);
+}
+
+#[test]
 fn status_renews_online_when_the_lease_has_expired() {
     let h = Harness::empty();
     h.set_state(licensed(

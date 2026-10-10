@@ -76,23 +76,19 @@ impl Serialize for ActivateError {
 /// What `activate()` answers: `Ok(())` once this device holds a verified lease.
 pub type ActivateResult = Result<(), ActivateError>;
 
-/// Why `deactivate()`, `upgrade_url()` or `purchase_url()` failed.
+/// Why `deactivate()` or `upgrade_url()` failed.
 ///
-/// Serialises as its word (`"storage"`, `"busy"`, `"invalid-url"`, `"random"`).
+/// Serialises as its word (`"storage"`, `"busy"`, `"invalid-url"`).
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum Error {
     /// The licence state could not be read or saved.
     Storage(io::Error),
-    /// A previous licence call on this `License` has not finished, and this
-    /// call cannot write safely until it has (`deactivate()` drops the local
-    /// licence; `purchase_url()` with no secret held saves a new one). Try again.
+    /// A previous licence call on this `License` has not finished: the local
+    /// licence cannot be dropped safely until it has. Try again.
     Busy,
     /// The payment link is not an absolute `http` or `https` URL.
     InvalidUrl,
-    /// The platform's random source failed, so `purchase_url()` could make
-    /// no purchase secret.
-    Random(io::Error),
 }
 
 impl Error {
@@ -102,7 +98,6 @@ impl Error {
             Error::Storage(_) => "storage",
             Error::Busy => "busy",
             Error::InvalidUrl => "invalid-url",
-            Error::Random(_) => "random",
         }
     }
 }
@@ -115,9 +110,6 @@ impl fmt::Display for Error {
             }
             Error::Busy => f.write_str("a previous licence call has not finished; try again"),
             Error::InvalidUrl => f.write_str("the payment link is not an absolute http(s) URL"),
-            Error::Random(error) => {
-                write!(f, "no purchase secret could be made: {error}")
-            }
         }
     }
 }
@@ -125,7 +117,7 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Error::Storage(error) | Error::Random(error) => Some(error),
+            Error::Storage(error) => Some(error),
             _ => None,
         }
     }

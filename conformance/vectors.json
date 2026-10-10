@@ -13,12 +13,9 @@
     "trialLeaseStatuses: the stored state is the trial start and the trial lease (trialStart, trialLease = token), the lease judged for device as trials judges it.",
     "entitlementNumbers.json is a number as the server writes it (JSON.stringify); entitlementNumbers.expect is the IEEE-754 bits, sign first, as 16 lowercase hex digits, of the double an ent member reads from it (entitlementsOf of {\"n\": json}): a reader that rounds wrongly fails here though it reads the file and a lease alike.",
     "majors: the major a build configured as configured (null: none) runs as, 0.x read as 1 as the server reads it. A vector marked jsOnly holds a fraction, which no typed port's config can hold, and every typed port skips it; a negative is not marked, and only a port whose major type is unsigned skips it.",
-    "purchaseUrls: the link purchaseUrl answers for the held secret: link with purchaseReferences' reference for secret as its one client_reference_id. The link is read as an absolute URL (every link here is already in its normal form), and its query is edited as text: each parameter named exactly client_reference_id (the text before its first =, or all of it) and each empty one left out, the others kept as written and in order, client_reference_id=<reference> added last (a reference needs no escaping), the fragment kept. upgradeUrl builds its link the same way, with the activation id.",
-    "purchaseReferences: the reference a link carries for a purchase secret: kgp_ and the base64url (no padding) of the SHA-256 of the secret's UTF-8 bytes. The secret stays on the device and is sent only in the claim.",
-    "purchaseTokenKept, claimDue and trialReportDue take a stored state; purchaseTokenKept and trialReportDue judge it at now (the guarded clock); claimDue judges the link's freshness (purchaseTokenAt) at now and the wait (claimAskedAt) at clockNow (the device clock).",
-    "parseClaimBody.expect keeps key, activationId and lease when they are strings, pending only when it is true, error only when it is a string of at least one character; every other member, and a body that is not an object, gives nothing ({}).",
-    "claimOutcomes.response is the claim's answer (null for none at all); claimOutcomes.check is the SDK's offline check of the lease a 200 carried with key, activationId and lease (as leases.expect, with the claims when ok), null otherwise; claimOutcomes.kind is what the claim's fingerprint hashes (null for none). expect.result is bought, kept or dropped; expect.status is the status a bought key gives (null otherwise); expect.patch is the patch, with no stamp in it: a bought key's is saved with basis activation {at: the ask's guarded time, activationId, seen: the stored verdictAt}, which stamps verdictAt; a kept secret's with basis purchase {token: the secret, at: the purchaseTokenAt the ask read}; a dropped one's with basis purchase {token: the secret}.",
-    "claimBodies: the body a claim sends, null when none is sent. The device is deviceFrom(identity, no install kind, deviceHold), as the devices group reads one; start is true for startTrial(), false for status() and refresh(). fingerprints counts characters in UTF-16 units, as the server does; deviceName is the name already cut (trimDeviceName), null for none; major is the major already read (majors).",
+    "referencedLinks: link with reference as its one client_reference_id, as upgradeUrl answers it with the stored activation id. The link is read as an absolute URL (every link here is already in its normal form), and its query is edited as text: each parameter named exactly client_reference_id (the text before its first =, or all of it) and each empty one left out, the others kept as written and in order, client_reference_id=<reference> added last (a reference needs no escaping), the fragment kept.",
+    "trialReportDue takes a stored state and judges it at now (the guarded clock).",
+    "merges.latest may hold purchaseToken, purchaseTokenAt and claimAskedAt, which an earlier version stored to buy from the app: every save leaves them out, whatever its basis.",
     "publicJwk is the key set of one every group but keySets verifies with: a lease naming no key (kid) is verified by it, one naming its id too, and one naming another id is unknown-key.",
     "keyIds.expect is the id a lease names a key by: the base64url (no padding) of the SHA-256 of {\"crv\":\"Ed25519\",\"kty\":\"OKP\",\"x\":\"<x>\"}, its RFC 7638 thumbprint, or null for a JWK every SDK refuses: one that is not an object, whose kty is not OKP or crv not Ed25519 (both required), that holds d, whose use (when given) is not sig, whose key_ops (when given) are not a list naming verify, whose alg (when given) is neither EdDSA nor Ed25519, or whose x, its trailing = dropped, is not canonical base64url of 32 bytes. No other member is read. keySets.kids are the ids of keys, in the order given, a key given twice kept once; keySets.verify is the lease verified against that set at now, as leases.verify.",
     "grants.expect: whether ent, read as a lease's ent is read, grants code: a flag that is true, a number that is not 0, a text that is not empty; the code matched exactly."
@@ -46,13 +43,7 @@
     "STALE_TEMP_MS": 60000,
     "UPDATE_ATTEMPTS": 5,
     "UNKNOWN_HOST": "unknown-host",
-    "CLAIM_WAIT_MS": 300000,
-    "PURCHASE_TOKEN_MS": 2592000000,
-    "TRIAL_REPORT_MS": 86400000,
-    "PURCHASE_REFERENCE_PREFIX": "kgp_",
-    "CLAIM_EAGER_MS": 86400000,
-    "MAX_CLAIM_FINGERPRINTS": 4,
-    "MAX_CLAIM_FINGERPRINT_LENGTH": 200
+    "TRIAL_REPORT_MS": 86400000
   },
   "leases": [
     {
@@ -4493,15 +4484,6 @@
         "backoffSince": null,
         "backoffMs": null
       }
-    },
-    {
-      "name": "what an activation and a deactivation clear of a purchase: the token and its stamps",
-      "patch": "NO_PURCHASE",
-      "expect": {
-        "purchaseToken": null,
-        "purchaseTokenAt": null,
-        "claimAskedAt": null
-      }
     }
   ],
   "keyedBy": [
@@ -5307,7 +5289,7 @@
       }
     },
     {
-      "name": "a purchase link's save lands whole",
+      "name": "a launch report's stamp lands",
       "latest": {
         "trialStart": 1789740800000,
         "trialEndsAt": 1790345600000,
@@ -5315,9 +5297,7 @@
         "lastSeen": 1790000000000
       },
       "patch": {
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1790000000000,
-        "claimAskedAt": null
+        "trialReportedAt": 1790000000000
       },
       "basis": null,
       "expect": {
@@ -5325,12 +5305,11 @@
         "trialEndsAt": 1790345600000,
         "trialAt": 1789999995000,
         "lastSeen": 1790000000000,
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1790000000000
+        "trialReportedAt": 1790000000000
       }
     },
     {
-      "name": "a drop about the token stored clears it",
+      "name": "a purchase secret an earlier version stored is left out of any save",
       "latest": {
         "trialStart": 1789740800000,
         "trialEndsAt": 1790345600000,
@@ -5341,152 +5320,46 @@
         "claimAskedAt": 1789999940000
       },
       "patch": {
-        "purchaseToken": null,
-        "purchaseTokenAt": null,
-        "claimAskedAt": null
+        "trialReportedAt": 1790000000000
       },
-      "basis": {
-        "purchase": {
-          "token": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c"
-        }
-      },
+      "basis": null,
       "expect": {
         "trialStart": 1789740800000,
         "trialEndsAt": 1790345600000,
         "trialAt": 1789999995000,
+        "lastSeen": 1790000000000,
+        "trialReportedAt": 1790000000000
+      }
+    },
+    {
+      "name": "a purchase secret an earlier version stored is left out of a trial answer's save",
+      "latest": {
+        "trialStart": 1789740800000,
+        "trialEndsAt": 1790345600000,
+        "trialAt": 1789999995000,
+        "lastSeen": 1790000000000,
+        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
+        "purchaseTokenAt": 1789913600000,
+        "claimAskedAt": 1789999940000
+      },
+      "patch": {
+        "trialEndsAt": 1790432000000
+      },
+      "basis": {
+        "trial": {
+          "at": 1790000000000,
+          "seen": 1789999995000
+        }
+      },
+      "expect": {
+        "trialStart": 1789740800000,
+        "trialEndsAt": 1790432000000,
+        "trialAt": 1790000000000,
         "lastSeen": 1790000000000
       }
     },
     {
-      "name": "the wait after a claim about the token stored lands",
-      "latest": {
-        "trialStart": 1789740800000,
-        "trialEndsAt": 1790345600000,
-        "trialAt": 1789999995000,
-        "lastSeen": 1790000000000,
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1789913600000,
-        "claimAskedAt": 1789999940000
-      },
-      "patch": {
-        "claimAskedAt": 1790000000000
-      },
-      "basis": {
-        "purchase": {
-          "token": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-          "at": 1789913600000
-        }
-      },
-      "expect": {
-        "trialStart": 1789740800000,
-        "trialEndsAt": 1790345600000,
-        "trialAt": 1789999995000,
-        "lastSeen": 1790000000000,
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1789913600000,
-        "claimAskedAt": 1790000000000
-      }
-    },
-    {
-      "name": "a drop about a token no longer stored leaves the new one",
-      "latest": {
-        "trialStart": 1789740800000,
-        "trialEndsAt": 1790345600000,
-        "trialAt": 1789999995000,
-        "lastSeen": 1790000000000,
-        "purchaseToken": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
-        "purchaseTokenAt": 1789999999000,
-        "claimAskedAt": 1789999940000
-      },
-      "patch": {
-        "purchaseToken": null,
-        "purchaseTokenAt": null,
-        "claimAskedAt": null
-      },
-      "basis": {
-        "purchase": {
-          "token": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c"
-        }
-      },
-      "expect": {
-        "trialStart": 1789740800000,
-        "trialEndsAt": 1790345600000,
-        "trialAt": 1789999995000,
-        "lastSeen": 1790000000000,
-        "purchaseToken": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
-        "purchaseTokenAt": 1789999999000,
-        "claimAskedAt": 1789999940000
-      }
-    },
-    {
-      "name": "the wait after a claim about a token no longer stored is not saved",
-      "latest": {
-        "trialStart": 1789740800000,
-        "trialEndsAt": 1790345600000,
-        "trialAt": 1789999995000,
-        "lastSeen": 1790000000000,
-        "purchaseToken": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
-        "purchaseTokenAt": 1789999999000,
-        "claimAskedAt": 1789999940000
-      },
-      "patch": {
-        "claimAskedAt": 1790000000000
-      },
-      "basis": {
-        "purchase": {
-          "token": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-          "at": 1789913600000
-        }
-      },
-      "expect": {
-        "trialStart": 1789740800000,
-        "trialEndsAt": 1790345600000,
-        "trialAt": 1789999995000,
-        "lastSeen": 1790000000000,
-        "purchaseToken": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
-        "purchaseTokenAt": 1789999999000,
-        "claimAskedAt": 1789999940000
-      }
-    },
-    {
-      "name": "a drop about a token an activation cleared meanwhile changes nothing",
-      "latest": {
-        "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-        "activationId": "act_1",
-        "lease": "lease-latest",
-        "verdictAt": 1789999999000,
-        "keptMajor": 3,
-        "trialStart": 1789136000000,
-        "trialEndsAt": 1790086400000,
-        "trialAt": 1789999995000,
-        "lastSeen": 1790000000000,
-        "deviceKind": "machine"
-      },
-      "patch": {
-        "purchaseToken": null,
-        "purchaseTokenAt": null,
-        "claimAskedAt": null
-      },
-      "basis": {
-        "purchase": {
-          "token": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c"
-        }
-      },
-      "expect": {
-        "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-        "activationId": "act_1",
-        "lease": "lease-latest",
-        "verdictAt": 1789999999000,
-        "keptMajor": 3,
-        "trialStart": 1789136000000,
-        "trialEndsAt": 1790086400000,
-        "trialAt": 1789999995000,
-        "lastSeen": 1790000000000,
-        "deviceKind": "machine"
-      }
-    },
-    {
-      "name": "a bought key's activation clears the purchase fields",
+      "name": "a purchase secret an earlier version stored is left out of an activation",
       "latest": {
         "trialStart": 1789740800000,
         "trialEndsAt": 1790345600000,
@@ -5499,17 +5372,14 @@
       "patch": {
         "key": "SLUICE-BUY1-BUY1-BUY1-BUY1",
         "activationId": "act_new",
-        "lease": "lease-bought",
+        "lease": "lease-typed",
         "checkedMajor": 3,
         "refused": null,
         "refusedMajor": null,
         "refusedFor": null,
         "backoffSince": null,
         "backoffMs": null,
-        "deviceKind": "machine",
-        "purchaseToken": null,
-        "purchaseTokenAt": null,
-        "claimAskedAt": null
+        "deviceKind": "machine"
       },
       "basis": {
         "activation": {
@@ -5524,14 +5394,14 @@
         "lastSeen": 1790000000000,
         "key": "SLUICE-BUY1-BUY1-BUY1-BUY1",
         "activationId": "act_new",
-        "lease": "lease-bought",
+        "lease": "lease-typed",
         "checkedMajor": 3,
         "deviceKind": "machine",
         "verdictAt": 1790000000000
       }
     },
     {
-      "name": "an activation of the same seat older than the stored verdict still clears the purchase fields",
+      "name": "a purchase secret an earlier version stored is left out of a renewal's save",
       "latest": {
         "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
         "activationId": "act_1",
@@ -5544,28 +5414,24 @@
         "lastSeen": 1790000000000,
         "deviceKind": "machine",
         "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1789913600000
+        "purchaseTokenAt": 1789913600000,
+        "claimAskedAt": 1789999940000
       },
       "patch": {
-        "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-        "activationId": "act_1",
-        "lease": "lease-reactivated",
-        "purchaseToken": null,
-        "purchaseTokenAt": null,
-        "claimAskedAt": null
+        "lease": "lease-new"
       },
       "basis": {
-        "activation": {
-          "at": 1789999995000,
+        "answer": {
+          "at": 1790000000000,
           "activationId": "act_1",
-          "seen": 1789999994000
+          "seen": 1789999999000
         }
       },
       "expect": {
         "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
         "activationId": "act_1",
-        "lease": "lease-latest",
-        "verdictAt": 1789999999000,
+        "lease": "lease-new",
+        "verdictAt": 1790000000000,
         "keptMajor": 3,
         "trialStart": 1789136000000,
         "trialEndsAt": 1790086400000,
@@ -5575,7 +5441,7 @@
       }
     },
     {
-      "name": "a deactivation clears the purchase fields",
+      "name": "a purchase secret an earlier version stored is left out of an answer about another activation",
       "latest": {
         "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
         "activationId": "act_1",
@@ -5589,113 +5455,68 @@
         "deviceKind": "machine",
         "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
         "purchaseTokenAt": 1789913600000,
-        "claimAskedAt": 1789999999000
+        "claimAskedAt": 1789999940000
       },
       "patch": {
-        "key": null,
-        "activationId": null,
-        "lease": null,
-        "checkedMajor": null,
-        "keptMajor": null,
-        "deviceKind": null,
-        "refused": null,
-        "refusedMajor": null,
-        "refusedFor": null,
-        "backoffSince": null,
-        "backoffMs": null,
-        "purchaseToken": null,
-        "purchaseTokenAt": null,
-        "claimAskedAt": null,
-        "verdictAt": 1790000000000
+        "lease": "lease-old",
+        "trialEndsAt": 1790172800000
       },
-      "basis": null,
+      "basis": {
+        "answer": {
+          "at": 1790000000000,
+          "activationId": "act_old",
+          "seen": 1789999999000
+        }
+      },
       "expect": {
-        "verdictAt": 1790000000000,
+        "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+        "activationId": "act_1",
+        "lease": "lease-latest",
+        "verdictAt": 1789999999000,
+        "keptMajor": 3,
         "trialStart": 1789136000000,
-        "trialEndsAt": 1790086400000,
+        "trialEndsAt": 1790172800000,
         "trialAt": 1789999995000,
-        "lastSeen": 1790000000000
+        "lastSeen": 1790000000000,
+        "deviceKind": "machine"
       }
     },
     {
-      "name": "a launch report's stamp lands",
+      "name": "a purchase secret an earlier version stored is left out of a note about the activation",
       "latest": {
-        "trialStart": 1789740800000,
-        "trialEndsAt": 1790345600000,
+        "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+        "activationId": "act_1",
+        "lease": "lease-latest",
+        "verdictAt": 1789999999000,
+        "keptMajor": 3,
+        "trialStart": 1789136000000,
+        "trialEndsAt": 1790086400000,
         "trialAt": 1789999995000,
         "lastSeen": 1790000000000,
+        "deviceKind": "machine",
         "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
         "purchaseTokenAt": 1789913600000,
         "claimAskedAt": 1789999940000
       },
       "patch": {
-        "trialReportedAt": 1790000000000
-      },
-      "basis": null,
-      "expect": {
-        "trialStart": 1789740800000,
-        "trialEndsAt": 1790345600000,
-        "trialAt": 1789999995000,
-        "lastSeen": 1790000000000,
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1789913600000,
-        "claimAskedAt": 1789999940000,
-        "trialReportedAt": 1790000000000
-      }
-    },
-    {
-      "name": "the wait after a claim, the same secret's link handed out again since, is not saved",
-      "latest": {
-        "trialStart": 1789740800000,
-        "trialEndsAt": 1790345600000,
-        "trialAt": 1789999995000,
-        "lastSeen": 1790000000000,
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1789999999000
-      },
-      "patch": {
-        "claimAskedAt": 1790000000000
+        "keptMajor": 5
       },
       "basis": {
-        "purchase": {
-          "token": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-          "at": 1789913600000
+        "about": {
+          "activationId": "act_1"
         }
       },
       "expect": {
-        "trialStart": 1789740800000,
-        "trialEndsAt": 1790345600000,
+        "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+        "activationId": "act_1",
+        "lease": "lease-latest",
+        "verdictAt": 1789999999000,
+        "keptMajor": 5,
+        "trialStart": 1789136000000,
+        "trialEndsAt": 1790086400000,
         "trialAt": 1789999995000,
         "lastSeen": 1790000000000,
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1789999999000
-      }
-    },
-    {
-      "name": "a drop, the same secret's link handed out again since, still lands",
-      "latest": {
-        "trialStart": 1789740800000,
-        "trialEndsAt": 1790345600000,
-        "trialAt": 1789999995000,
-        "lastSeen": 1790000000000,
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1789999999000
-      },
-      "patch": {
-        "purchaseToken": null,
-        "purchaseTokenAt": null,
-        "claimAskedAt": null
-      },
-      "basis": {
-        "purchase": {
-          "token": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c"
-        }
-      },
-      "expect": {
-        "trialStart": 1789740800000,
-        "trialEndsAt": 1790345600000,
-        "trialAt": 1789999995000,
-        "lastSeen": 1790000000000
+        "deviceKind": "machine"
       }
     }
   ],
@@ -13101,1426 +12922,78 @@
       "expect": 1
     }
   ],
-  "purchaseUrls": [
+  "referencedLinks": [
     {
       "name": "no query: the reference added",
       "link": "https://buy.stripe.com/test_abc",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "expect": "https://buy.stripe.com/test_abc?client_reference_id=kgp_2Q1fGwyN64dBzmVFc0gHcKaNWs9mA8wTLLPh5HQKWfM"
+      "reference": "act_01HZXK4Q8R5T2V9WB3NC6MDE7F",
+      "expect": "https://buy.stripe.com/test_abc?client_reference_id=act_01HZXK4Q8R5T2V9WB3NC6MDE7F"
     },
     {
       "name": "parameters: kept as written and in order, the reference last",
       "link": "https://buy.stripe.com/test_abc?prefilled_email=jo%40example.com&locale=fr",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "expect": "https://buy.stripe.com/test_abc?prefilled_email=jo%40example.com&locale=fr&client_reference_id=kgp_2Q1fGwyN64dBzmVFc0gHcKaNWs9mA8wTLLPh5HQKWfM"
+      "reference": "act_01HZXK4Q8R5T2V9WB3NC6MDE7F",
+      "expect": "https://buy.stripe.com/test_abc?prefilled_email=jo%40example.com&locale=fr&client_reference_id=act_01HZXK4Q8R5T2V9WB3NC6MDE7F"
     },
     {
       "name": "a client_reference_id already there: replaced",
       "link": "https://buy.stripe.com/test_abc?client_reference_id=act_1&locale=fr",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "expect": "https://buy.stripe.com/test_abc?locale=fr&client_reference_id=kgp_2Q1fGwyN64dBzmVFc0gHcKaNWs9mA8wTLLPh5HQKWfM"
+      "reference": "act_01HZXK4Q8R5T2V9WB3NC6MDE7F",
+      "expect": "https://buy.stripe.com/test_abc?locale=fr&client_reference_id=act_01HZXK4Q8R5T2V9WB3NC6MDE7F"
     },
     {
       "name": "two client_reference_ids: one reference in their place",
       "link": "https://buy.stripe.com/test_abc?client_reference_id=a&x=1&client_reference_id=b",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "expect": "https://buy.stripe.com/test_abc?x=1&client_reference_id=kgp_2Q1fGwyN64dBzmVFc0gHcKaNWs9mA8wTLLPh5HQKWfM"
+      "reference": "act_01HZXK4Q8R5T2V9WB3NC6MDE7F",
+      "expect": "https://buy.stripe.com/test_abc?x=1&client_reference_id=act_01HZXK4Q8R5T2V9WB3NC6MDE7F"
     },
     {
       "name": "a client_reference_id with no value: replaced",
       "link": "https://buy.stripe.com/test_abc?client_reference_id&x=1",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "expect": "https://buy.stripe.com/test_abc?x=1&client_reference_id=kgp_2Q1fGwyN64dBzmVFc0gHcKaNWs9mA8wTLLPh5HQKWfM"
+      "reference": "act_01HZXK4Q8R5T2V9WB3NC6MDE7F",
+      "expect": "https://buy.stripe.com/test_abc?x=1&client_reference_id=act_01HZXK4Q8R5T2V9WB3NC6MDE7F"
     },
     {
       "name": "a name that only starts with client_reference_id: kept",
       "link": "https://buy.stripe.com/test_abc?client_reference_id_old=1",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "expect": "https://buy.stripe.com/test_abc?client_reference_id_old=1&client_reference_id=kgp_2Q1fGwyN64dBzmVFc0gHcKaNWs9mA8wTLLPh5HQKWfM"
+      "reference": "act_01HZXK4Q8R5T2V9WB3NC6MDE7F",
+      "expect": "https://buy.stripe.com/test_abc?client_reference_id_old=1&client_reference_id=act_01HZXK4Q8R5T2V9WB3NC6MDE7F"
     },
     {
       "name": "a fragment: kept, after the query",
       "link": "https://buy.stripe.com/test_abc#checkout",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "expect": "https://buy.stripe.com/test_abc?client_reference_id=kgp_2Q1fGwyN64dBzmVFc0gHcKaNWs9mA8wTLLPh5HQKWfM#checkout"
+      "reference": "act_01HZXK4Q8R5T2V9WB3NC6MDE7F",
+      "expect": "https://buy.stripe.com/test_abc?client_reference_id=act_01HZXK4Q8R5T2V9WB3NC6MDE7F#checkout"
     },
     {
       "name": "parameters and a fragment",
       "link": "https://buy.stripe.com/test_abc?locale=fr#checkout",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "expect": "https://buy.stripe.com/test_abc?locale=fr&client_reference_id=kgp_2Q1fGwyN64dBzmVFc0gHcKaNWs9mA8wTLLPh5HQKWfM#checkout"
+      "reference": "act_01HZXK4Q8R5T2V9WB3NC6MDE7F",
+      "expect": "https://buy.stripe.com/test_abc?locale=fr&client_reference_id=act_01HZXK4Q8R5T2V9WB3NC6MDE7F#checkout"
     },
     {
       "name": "empty parameters: left out",
       "link": "https://buy.stripe.com/test_abc?&locale=fr&&",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "expect": "https://buy.stripe.com/test_abc?locale=fr&client_reference_id=kgp_2Q1fGwyN64dBzmVFc0gHcKaNWs9mA8wTLLPh5HQKWfM"
+      "reference": "act_01HZXK4Q8R5T2V9WB3NC6MDE7F",
+      "expect": "https://buy.stripe.com/test_abc?locale=fr&client_reference_id=act_01HZXK4Q8R5T2V9WB3NC6MDE7F"
     },
     {
       "name": "an empty query: the reference alone",
       "link": "https://buy.stripe.com/test_abc?",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "expect": "https://buy.stripe.com/test_abc?client_reference_id=kgp_2Q1fGwyN64dBzmVFc0gHcKaNWs9mA8wTLLPh5HQKWfM"
+      "reference": "act_01HZXK4Q8R5T2V9WB3NC6MDE7F",
+      "expect": "https://buy.stripe.com/test_abc?client_reference_id=act_01HZXK4Q8R5T2V9WB3NC6MDE7F"
     },
     {
       "name": "a value with = in it: kept as written",
       "link": "https://buy.stripe.com/test_abc?redirect=a=b",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "expect": "https://buy.stripe.com/test_abc?redirect=a=b&client_reference_id=kgp_2Q1fGwyN64dBzmVFc0gHcKaNWs9mA8wTLLPh5HQKWfM"
+      "reference": "act_01HZXK4Q8R5T2V9WB3NC6MDE7F",
+      "expect": "https://buy.stripe.com/test_abc?redirect=a=b&client_reference_id=act_01HZXK4Q8R5T2V9WB3NC6MDE7F"
     },
     {
       "name": "another host, a port and a deeper path: kept",
       "link": "https://pay.example.com:8443/buy/sluice?plan=pro",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "expect": "https://pay.example.com:8443/buy/sluice?plan=pro&client_reference_id=kgp_2Q1fGwyN64dBzmVFc0gHcKaNWs9mA8wTLLPh5HQKWfM"
-    }
-  ],
-  "purchaseTokenKept": [
-    {
-      "name": "no token: not held",
-      "state": {},
-      "now": 1790000000000,
-      "expect": false
-    },
-    {
-      "name": "handed out now: held",
-      "state": {
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1790000000000
-      },
-      "now": 1790000000000,
-      "expect": true
-    },
-    {
-      "name": "a day inside its bound: held",
-      "state": {
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1787494400000
-      },
-      "now": 1790000000000,
-      "expect": true
-    },
-    {
-      "name": "a millisecond inside its bound: held",
-      "state": {
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1787408000001
-      },
-      "now": 1790000000000,
-      "expect": true
-    },
-    {
-      "name": "exactly its bound: dropped",
-      "state": {
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1787408000000
-      },
-      "now": 1790000000000,
-      "expect": false
-    },
-    {
-      "name": "a day past its bound: dropped",
-      "state": {
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1787321600000
-      },
-      "now": 1790000000000,
-      "expect": false
-    },
-    {
-      "name": "stamped ahead of now: held",
-      "state": {
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1790086400000
-      },
-      "now": 1790000000000,
-      "expect": true
-    },
-    {
-      "name": "a token with no stamp: dropped",
-      "state": {
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c"
-      },
-      "now": 1790000000000,
-      "expect": false
-    },
-    {
-      "name": "a stamp with no token: not held",
-      "state": {
-        "purchaseTokenAt": 1790000000000
-      },
-      "now": 1790000000000,
-      "expect": false
-    }
-  ],
-  "claimDue": [
-    {
-      "name": "not asked since the link: due",
-      "state": {
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1790000000000
-      },
-      "clockNow": 1790000000000,
-      "now": 1790000000000,
-      "expect": true
-    },
-    {
-      "name": "asked this moment: not yet",
-      "state": {
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1789996400000,
-        "claimAskedAt": 1790000000000
-      },
-      "clockNow": 1790000000000,
-      "now": 1790000000000,
-      "expect": false
-    },
-    {
-      "name": "a millisecond inside the wait: not yet",
-      "state": {
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1789996400000,
-        "claimAskedAt": 1789999700001
-      },
-      "clockNow": 1790000000000,
-      "now": 1790000000000,
-      "expect": false
-    },
-    {
-      "name": "exactly the wait: due",
-      "state": {
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1789996400000,
-        "claimAskedAt": 1789999700000
-      },
-      "clockNow": 1790000000000,
-      "now": 1790000000000,
-      "expect": true
-    },
-    {
-      "name": "twenty minutes after: due",
-      "state": {
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1789996400000,
-        "claimAskedAt": 1789998800000
-      },
-      "clockNow": 1790000000000,
-      "now": 1790000000000,
-      "expect": true
-    },
-    {
-      "name": "the device clock set back before the ask: due",
-      "state": {
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1789996400000,
-        "claimAskedAt": 1790000001000
-      },
-      "clockNow": 1790000000000,
-      "now": 1790000000000,
-      "expect": true
-    },
-    {
-      "name": "a link a millisecond under a day old: due",
-      "state": {
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1789913600001
-      },
-      "clockNow": 1790000000000,
-      "now": 1790000000000,
-      "expect": true
-    },
-    {
-      "name": "a link exactly a day old: only refresh() and startTrial() ask",
-      "state": {
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1789913600000
-      },
-      "clockNow": 1790000000000,
-      "now": 1790000000000,
-      "expect": false
-    },
-    {
-      "name": "a link ten days old, the wait long over: not due",
-      "state": {
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1789136000000,
-        "claimAskedAt": 1789913600000
-      },
-      "clockNow": 1790000000000,
-      "now": 1790000000000,
-      "expect": false
-    },
-    {
-      "name": "a link stamped ahead of the guarded clock: due",
-      "state": {
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1790000001000
-      },
-      "clockNow": 1790000000000,
-      "now": 1790000000000,
-      "expect": true
-    },
-    {
-      "name": "a secret with no stamp: not due",
-      "state": {
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c"
-      },
-      "clockNow": 1790000000000,
-      "now": 1790000000000,
-      "expect": false
-    },
-    {
-      "name": "the guarded clock a day ahead of the device clock: freshness by the one, the wait by the other",
-      "state": {
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1790082800000,
-        "claimAskedAt": 1789999700000
-      },
-      "clockNow": 1790000000000,
-      "now": 1790086400000,
-      "expect": true
-    },
-    {
-      "name": "the guarded clock a day ahead: the wait still runs by the device clock, not due",
-      "state": {
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1790082800000,
-        "claimAskedAt": 1789999999000
-      },
-      "clockNow": 1790000000000,
-      "now": 1790086400000,
-      "expect": false
-    },
-    {
-      "name": "the guarded clock a day ahead: the link is stale by it, though fresh by the device clock, not due",
-      "state": {
-        "purchaseToken": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "purchaseTokenAt": 1789996400000
-      },
-      "clockNow": 1790000000000,
-      "now": 1790086400000,
-      "expect": false
-    }
-  ],
-  "parseClaimBody": [
-    {
-      "body": {
-        "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-        "activationId": "act_9",
-        "lease": "header.payload.sig",
-        "inGrace": false,
-        "validUntil": null,
-        "future": {
-          "nested": [
-            1
-          ]
-        }
-      },
-      "expect": {
-        "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-        "activationId": "act_9",
-        "lease": "header.payload.sig"
-      }
-    },
-    {
-      "body": {
-        "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-        "lease": "header.payload.sig"
-      },
-      "expect": {
-        "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-        "lease": "header.payload.sig"
-      }
-    },
-    {
-      "body": {
-        "pending": true
-      },
-      "expect": {
-        "pending": true
-      }
-    },
-    {
-      "body": {
-        "pending": "yes"
-      },
-      "expect": {}
-    },
-    {
-      "body": {
-        "pending": false
-      },
-      "expect": {}
-    },
-    {
-      "body": {
-        "error": "spent"
-      },
-      "expect": {
-        "error": "spent"
-      }
-    },
-    {
-      "body": {
-        "error": ""
-      },
-      "expect": {}
-    },
-    {
-      "body": {
-        "error": 42
-      },
-      "expect": {}
-    },
-    {
-      "body": {
-        "key": 7,
-        "activationId": [
-          "act"
-        ],
-        "lease": null
-      },
-      "expect": {}
-    },
-    {
-      "body": {},
-      "expect": {}
-    },
-    {
-      "body": null,
-      "expect": {}
-    },
-    {
-      "body": "a string",
-      "expect": {}
-    },
-    {
-      "body": [],
-      "expect": {}
-    },
-    {
-      "body": 42,
-      "expect": {}
-    }
-  ],
-  "claimOutcomes": [
-    {
-      "name": "a 200 with the key, its activation and a lease that licenses: bought; claimed under a machine id",
-      "response": {
-        "status": 200,
-        "json": {
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "activationId": "act_1",
-          "lease": "header.payload.signature",
-          "inGrace": false,
-          "validUntil": null
-        }
-      },
-      "check": {
-        "ok": true,
-        "test": false,
-        "claims": {
-          "iss": "keygrant",
-          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "product": "sluice",
-          "aid": "act_1",
-          "model": "perpetual",
-          "lim": 3,
-          "major": 3,
-          "ent": {},
-          "iat": 1789913600,
-          "exp": 1792505600
-        }
-      },
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "bought",
-        "status": {
-          "state": "licensed",
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD"
-        },
-        "patch": {
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "activationId": "act_1",
-          "lease": "header.payload.signature",
-          "checkedMajor": 3,
-          "keptMajor": null,
-          "refused": null,
-          "refusedMajor": null,
-          "refusedFor": null,
-          "backoffSince": null,
-          "backoffMs": null,
-          "deviceKind": "machine",
-          "purchaseToken": null,
-          "purchaseTokenAt": null,
-          "claimAskedAt": null
-        }
-      }
-    },
-    {
-      "name": "a 200 with the key, its activation and a lease that licenses: bought; claimed under the host name",
-      "response": {
-        "status": 200,
-        "json": {
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "activationId": "act_1",
-          "lease": "header.payload.signature",
-          "inGrace": false,
-          "validUntil": null
-        }
-      },
-      "check": {
-        "ok": true,
-        "test": false,
-        "claims": {
-          "iss": "keygrant",
-          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "product": "sluice",
-          "aid": "act_1",
-          "model": "perpetual",
-          "lim": 3,
-          "major": 3,
-          "ent": {},
-          "iat": 1789913600,
-          "exp": 1792505600
-        }
-      },
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "hostname",
-      "expect": {
-        "result": "bought",
-        "status": {
-          "state": "licensed",
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD"
-        },
-        "patch": {
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "activationId": "act_1",
-          "lease": "header.payload.signature",
-          "checkedMajor": 3,
-          "keptMajor": null,
-          "refused": null,
-          "refusedMajor": null,
-          "refusedFor": null,
-          "backoffSince": null,
-          "backoffMs": null,
-          "deviceKind": "hostname",
-          "purchaseToken": null,
-          "purchaseTokenAt": null,
-          "claimAskedAt": null
-        }
-      }
-    },
-    {
-      "name": "a 200 with the key, its activation and a lease that licenses: bought; claimed under a fingerprint of no kind",
-      "response": {
-        "status": 200,
-        "json": {
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "activationId": "act_1",
-          "lease": "header.payload.signature",
-          "inGrace": false,
-          "validUntil": null
-        }
-      },
-      "check": {
-        "ok": true,
-        "test": false,
-        "claims": {
-          "iss": "keygrant",
-          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "product": "sluice",
-          "aid": "act_1",
-          "model": "perpetual",
-          "lim": 3,
-          "major": 3,
-          "ent": {},
-          "iat": 1789913600,
-          "exp": 1792505600
-        }
-      },
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": null,
-      "expect": {
-        "result": "bought",
-        "status": {
-          "state": "licensed",
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD"
-        },
-        "patch": {
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "activationId": "act_1",
-          "lease": "header.payload.signature",
-          "checkedMajor": 3,
-          "keptMajor": null,
-          "refused": null,
-          "refusedMajor": null,
-          "refusedFor": null,
-          "backoffSince": null,
-          "backoffMs": null,
-          "deviceKind": null,
-          "purchaseToken": null,
-          "purchaseTokenAt": null,
-          "claimAskedAt": null
-        }
-      }
-    },
-    {
-      "name": "a 200 bought, a test licence",
-      "response": {
-        "status": 200,
-        "json": {
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "activationId": "act_1",
-          "lease": "header.payload.signature",
-          "inGrace": false,
-          "validUntil": null
-        }
-      },
-      "check": {
-        "ok": true,
-        "test": true,
-        "claims": {
-          "iss": "keygrant",
-          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "product": "sluice",
-          "aid": "act_1",
-          "model": "perpetual",
-          "lim": 3,
-          "major": 3,
-          "ent": {},
-          "iat": 1789913600,
-          "exp": 1792505600,
-          "test": true
-        }
-      },
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "bought",
-        "status": {
-          "state": "licensed",
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "test": true
-        },
-        "patch": {
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "activationId": "act_1",
-          "lease": "header.payload.signature",
-          "checkedMajor": 3,
-          "keptMajor": null,
-          "refused": null,
-          "refusedMajor": null,
-          "refusedFor": null,
-          "backoffSince": null,
-          "backoffMs": null,
-          "deviceKind": "machine",
-          "purchaseToken": null,
-          "purchaseTokenAt": null,
-          "claimAskedAt": null
-        }
-      }
-    },
-    {
-      "name": "a 200 bought, granting entitlements",
-      "response": {
-        "status": 200,
-        "json": {
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "activationId": "act_1",
-          "lease": "header.payload.signature",
-          "inGrace": false,
-          "validUntil": null
-        }
-      },
-      "check": {
-        "ok": true,
-        "test": false,
-        "claims": {
-          "iss": "keygrant",
-          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "product": "sluice",
-          "aid": "act_1",
-          "model": "perpetual",
-          "lim": 3,
-          "major": 3,
-          "ent": {
-            "edition": "pro",
-            "seats": 5
-          },
-          "iat": 1789913600,
-          "exp": 1792505600
-        }
-      },
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "bought",
-        "status": {
-          "state": "licensed",
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "entitlements": {
-            "edition": "pro",
-            "seats": 5
-          }
-        },
-        "patch": {
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "activationId": "act_1",
-          "lease": "header.payload.signature",
-          "checkedMajor": 3,
-          "keptMajor": null,
-          "refused": null,
-          "refusedMajor": null,
-          "refusedFor": null,
-          "backoffSince": null,
-          "backoffMs": null,
-          "deviceKind": "machine",
-          "purchaseToken": null,
-          "purchaseTokenAt": null,
-          "claimAskedAt": null
-        }
-      }
-    },
-    {
-      "name": "a 200 bought, inside an open upgrade window: the kept major is the build",
-      "response": {
-        "status": 200,
-        "json": {
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "activationId": "act_1",
-          "lease": "header.payload.signature",
-          "inGrace": false,
-          "validUntil": null
-        }
-      },
-      "check": {
-        "ok": true,
-        "test": false,
-        "claims": {
-          "iss": "keygrant",
-          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "product": "sluice",
-          "aid": "act_1",
-          "model": "perpetual",
-          "lim": 3,
-          "major": 1000000,
-          "ent": {},
-          "iat": 1789913600,
-          "exp": 1792505600,
-          "upgradeUntil": 1792592000
-        }
-      },
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 5,
-      "kind": "machine",
-      "expect": {
-        "result": "bought",
-        "status": {
-          "state": "licensed",
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD"
-        },
-        "patch": {
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "activationId": "act_1",
-          "lease": "header.payload.signature",
-          "checkedMajor": 5,
-          "keptMajor": 5,
-          "refused": null,
-          "refusedMajor": null,
-          "refusedFor": null,
-          "backoffSince": null,
-          "backoffMs": null,
-          "deviceKind": "machine",
-          "purchaseToken": null,
-          "purchaseTokenAt": null,
-          "claimAskedAt": null
-        }
-      }
-    },
-    {
-      "name": "a 200 bought that also says pending: bought",
-      "response": {
-        "status": 200,
-        "json": {
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "activationId": "act_1",
-          "lease": "header.payload.signature",
-          "pending": true
-        }
-      },
-      "check": {
-        "ok": true,
-        "test": false,
-        "claims": {
-          "iss": "keygrant",
-          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "product": "sluice",
-          "aid": "act_1",
-          "model": "perpetual",
-          "lim": 3,
-          "major": 3,
-          "ent": {},
-          "iat": 1789913600,
-          "exp": 1792505600
-        }
-      },
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "bought",
-        "status": {
-          "state": "licensed",
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD"
-        },
-        "patch": {
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "activationId": "act_1",
-          "lease": "header.payload.signature",
-          "checkedMajor": 3,
-          "keptMajor": null,
-          "refused": null,
-          "refusedMajor": null,
-          "refusedFor": null,
-          "backoffSince": null,
-          "backoffMs": null,
-          "deviceKind": "machine",
-          "purchaseToken": null,
-          "purchaseTokenAt": null,
-          "claimAskedAt": null
-        }
-      }
-    },
-    {
-      "name": "a 200 bought that also carries an error word: bought",
-      "response": {
-        "status": 200,
-        "json": {
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "activationId": "act_1",
-          "lease": "header.payload.signature",
-          "error": "spent"
-        }
-      },
-      "check": {
-        "ok": true,
-        "test": false,
-        "claims": {
-          "iss": "keygrant",
-          "sub": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "product": "sluice",
-          "aid": "act_1",
-          "model": "perpetual",
-          "lim": 3,
-          "major": 3,
-          "ent": {},
-          "iat": 1789913600,
-          "exp": 1792505600
-        }
-      },
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "bought",
-        "status": {
-          "state": "licensed",
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD"
-        },
-        "patch": {
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "activationId": "act_1",
-          "lease": "header.payload.signature",
-          "checkedMajor": 3,
-          "keptMajor": null,
-          "refused": null,
-          "refusedMajor": null,
-          "refusedFor": null,
-          "backoffSince": null,
-          "backoffMs": null,
-          "deviceKind": "machine",
-          "purchaseToken": null,
-          "purchaseTokenAt": null,
-          "claimAskedAt": null
-        }
-      }
-    },
-    {
-      "name": "a 200 pending: not bought yet, kept",
-      "response": {
-        "status": 200,
-        "json": {
-          "pending": true
-        }
-      },
-      "check": null,
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "kept",
-        "status": null,
-        "patch": {
-          "claimAskedAt": 1789999970000
-        }
-      }
-    },
-    {
-      "name": "no answer at all: kept",
-      "response": null,
-      "check": null,
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "kept",
-        "status": null,
-        "patch": {
-          "claimAskedAt": 1789999970000
-        }
-      }
-    },
-    {
-      "name": "a 500: kept",
-      "response": {
-        "status": 500,
-        "json": {
-          "error": "internal"
-        }
-      },
-      "check": null,
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "kept",
-        "status": null,
-        "patch": {
-          "claimAskedAt": 1789999970000
-        }
-      }
-    },
-    {
-      "name": "a 503 with no body: kept",
-      "response": {
-        "status": 503,
-        "json": null
-      },
-      "check": null,
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "kept",
-        "status": null,
-        "patch": {
-          "claimAskedAt": 1789999970000
-        }
-      }
-    },
-    {
-      "name": "a 502 that says spent: still no answer, kept",
-      "response": {
-        "status": 502,
-        "json": {
-          "error": "spent"
-        }
-      },
-      "check": null,
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "kept",
-        "status": null,
-        "patch": {
-          "claimAskedAt": 1789999970000
-        }
-      }
-    },
-    {
-      "name": "a 429: kept",
-      "response": {
-        "status": 429,
-        "json": {
-          "error": "rate-limited"
-        }
-      },
-      "check": null,
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "kept",
-        "status": null,
-        "patch": {
-          "claimAskedAt": 1789999970000
-        }
-      }
-    },
-    {
-      "name": "a 404 page, not JSON (a server with no claim endpoint): kept",
-      "response": {
-        "status": 404,
-        "json": "<html>Not Found</html>"
-      },
-      "check": null,
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "kept",
-        "status": null,
-        "patch": {
-          "claimAskedAt": 1789999970000
-        }
-      }
-    },
-    {
-      "name": "a 404 with no error word: kept",
-      "response": {
-        "status": 404,
-        "json": {
-          "message": "Not Found"
-        }
-      },
-      "check": null,
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "kept",
-        "status": null,
-        "patch": {
-          "claimAskedAt": 1789999970000
-        }
-      }
-    },
-    {
-      "name": "a 200 page, not JSON (a captive portal): kept",
-      "response": {
-        "status": 200,
-        "json": "<html>Sign in</html>"
-      },
-      "check": null,
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "kept",
-        "status": null,
-        "patch": {
-          "claimAskedAt": 1789999970000
-        }
-      }
-    },
-    {
-      "name": "a 200 with a key and a lease but no activation: kept",
-      "response": {
-        "status": 200,
-        "json": {
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "lease": "header.payload.signature"
-        }
-      },
-      "check": null,
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "kept",
-        "status": null,
-        "patch": {
-          "claimAskedAt": 1789999970000
-        }
-      }
-    },
-    {
-      "name": "a 200 with nothing: kept",
-      "response": {
-        "status": 200,
-        "json": {}
-      },
-      "check": null,
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "kept",
-        "status": null,
-        "patch": {
-          "claimAskedAt": 1789999970000
-        }
-      }
-    },
-    {
-      "name": "a 200 whose pending is not true: kept",
-      "response": {
-        "status": 200,
-        "json": {
-          "pending": "yes"
-        }
-      },
-      "check": null,
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "kept",
-        "status": null,
-        "patch": {
-          "claimAskedAt": 1789999970000
-        }
-      }
-    },
-    {
-      "name": "a 403 whose error is empty: no word, kept",
-      "response": {
-        "status": 403,
-        "json": {
-          "error": ""
-        }
-      },
-      "check": null,
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "kept",
-        "status": null,
-        "patch": {
-          "claimAskedAt": 1789999970000
-        }
-      }
-    },
-    {
-      "name": "a 409 spent: another device took it, dropped",
-      "response": {
-        "status": 409,
-        "json": {
-          "error": "spent"
-        }
-      },
-      "check": null,
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "dropped",
-        "status": null,
-        "patch": {
-          "purchaseToken": null,
-          "purchaseTokenAt": null,
-          "claimAskedAt": null
-        }
-      }
-    },
-    {
-      "name": "a 403 pickup-off: dropped, the key typed from the email",
-      "response": {
-        "status": 403,
-        "json": {
-          "error": "pickup-off"
-        }
-      },
-      "check": null,
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "dropped",
-        "status": null,
-        "patch": {
-          "purchaseToken": null,
-          "purchaseTokenAt": null,
-          "claimAskedAt": null
-        }
-      }
-    },
-    {
-      "name": "a 403 limit: an activation refusal, dropped",
-      "response": {
-        "status": 403,
-        "json": {
-          "error": "limit"
-        }
-      },
-      "check": null,
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "dropped",
-        "status": null,
-        "patch": {
-          "purchaseToken": null,
-          "purchaseTokenAt": null,
-          "claimAskedAt": null
-        }
-      }
-    },
-    {
-      "name": "a 403 revoked: dropped",
-      "response": {
-        "status": 403,
-        "json": {
-          "error": "revoked"
-        }
-      },
-      "check": null,
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "dropped",
-        "status": null,
-        "patch": {
-          "purchaseToken": null,
-          "purchaseTokenAt": null,
-          "claimAskedAt": null
-        }
-      }
-    },
-    {
-      "name": "a 400 invalid-request: dropped",
-      "response": {
-        "status": 400,
-        "json": {
-          "error": "invalid-request"
-        }
-      },
-      "check": null,
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "dropped",
-        "status": null,
-        "patch": {
-          "purchaseToken": null,
-          "purchaseTokenAt": null,
-          "claimAskedAt": null
-        }
-      }
-    },
-    {
-      "name": "a 404 unknown-product: dropped",
-      "response": {
-        "status": 404,
-        "json": {
-          "error": "unknown-product"
-        }
-      },
-      "check": null,
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "dropped",
-        "status": null,
-        "patch": {
-          "purchaseToken": null,
-          "purchaseTokenAt": null,
-          "claimAskedAt": null
-        }
-      }
-    },
-    {
-      "name": "a 200 with an error word and no key: dropped",
-      "response": {
-        "status": 200,
-        "json": {
-          "error": "spent"
-        }
-      },
-      "check": null,
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "dropped",
-        "status": null,
-        "patch": {
-          "purchaseToken": null,
-          "purchaseTokenAt": null,
-          "claimAskedAt": null
-        }
-      }
-    },
-    {
-      "name": "a 200 with the key, its lease expired here: dropped",
-      "response": {
-        "status": 200,
-        "json": {
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "activationId": "act_1",
-          "lease": "header.payload.signature"
-        }
-      },
-      "check": {
-        "ok": false,
-        "reason": "expired"
-      },
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "dropped",
-        "status": null,
-        "patch": {
-          "purchaseToken": null,
-          "purchaseTokenAt": null,
-          "claimAskedAt": null
-        }
-      }
-    },
-    {
-      "name": "a 200 with the key, its lease not this licence's: dropped",
-      "response": {
-        "status": 200,
-        "json": {
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "activationId": "act_1",
-          "lease": "header.payload.signature"
-        }
-      },
-      "check": {
-        "ok": false,
-        "reason": "tampered"
-      },
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "dropped",
-        "status": null,
-        "patch": {
-          "purchaseToken": null,
-          "purchaseTokenAt": null,
-          "claimAskedAt": null
-        }
-      }
-    },
-    {
-      "name": "a 200 with the key, its lease for a newer build: dropped",
-      "response": {
-        "status": 200,
-        "json": {
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "activationId": "act_1",
-          "lease": "header.payload.signature"
-        }
-      },
-      "check": {
-        "ok": false,
-        "reason": "upgrade"
-      },
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "dropped",
-        "status": null,
-        "patch": {
-          "purchaseToken": null,
-          "purchaseTokenAt": null,
-          "claimAskedAt": null
-        }
-      }
-    },
-    {
-      "name": "a 200 with the key, its lease for an older build: dropped",
-      "response": {
-        "status": 200,
-        "json": {
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "activationId": "act_1",
-          "lease": "header.payload.signature"
-        }
-      },
-      "check": {
-        "ok": false,
-        "reason": "outdated"
-      },
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "dropped",
-        "status": null,
-        "patch": {
-          "purchaseToken": null,
-          "purchaseTokenAt": null,
-          "claimAskedAt": null
-        }
-      }
-    },
-    {
-      "name": "a 200 with the key, its lease for another device: dropped",
-      "response": {
-        "status": 200,
-        "json": {
-          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
-          "activationId": "act_1",
-          "lease": "header.payload.signature"
-        }
-      },
-      "check": {
-        "ok": false,
-        "reason": "device"
-      },
-      "clockNow": 1789999970000,
-      "now": 1790000000000,
-      "major": 3,
-      "kind": "machine",
-      "expect": {
-        "result": "dropped",
-        "status": null,
-        "patch": {
-          "purchaseToken": null,
-          "purchaseTokenAt": null,
-          "claimAskedAt": null
-        }
-      }
+      "reference": "act_01HZXK4Q8R5T2V9WB3NC6MDE7F",
+      "expect": "https://pay.example.com:8443/buy/sluice?plan=pro&client_reference_id=act_01HZXK4Q8R5T2V9WB3NC6MDE7F"
     }
   ],
   "trialReportDue": [
@@ -14604,370 +13077,6 @@
       },
       "now": 1790000000000,
       "expect": false
-    }
-  ],
-  "purchaseReferences": [
-    {
-      "name": "a secret of letters and digits",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "expect": "kgp_2Q1fGwyN64dBzmVFc0gHcKaNWs9mA8wTLLPh5HQKWfM"
-    },
-    {
-      "name": "a secret of 32 zero bytes",
-      "secret": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-      "expect": "kgp_DwBzhbb51LfusnSGBa_hqYSgo7-j8BTQnip4TOnlzRo"
-    },
-    {
-      "name": "a secret of the bytes 0 to 31",
-      "secret": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
-      "expect": "kgp_6oZqdX5MOLq_qBJ8vppAnT4fk6AP8UiP9zX8-Rev_9A"
-    },
-    {
-      "name": "a secret with - and _ in it",
-      "secret": "-__7__v_-__7__v_-__7__v_-__7__v_-__7__v_-_8",
-      "expect": "kgp_5tF6iD2MphWuTiGf0h8DzfSD5SrMurRmbE1Bi4iP-vg"
-    }
-  ],
-  "claimBodies": [
-    {
-      "name": "a machine id and the host name: both, own first",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "deviceHold": true,
-      "deviceName": "Rae’s laptop",
-      "major": 3,
-      "start": false,
-      "identity": {
-        "fingerprint": "fingerprint-machine-own",
-        "kind": "machine",
-        "alternates": [
-          "fingerprint-hostname-alt"
-        ]
-      },
-      "expect": {
-        "token": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "fingerprint": "fingerprint-machine-own",
-        "fingerprintKind": "machine",
-        "fingerprints": [
-          "fingerprint-machine-own",
-          "fingerprint-hostname-alt"
-        ],
-        "name": "Rae’s laptop",
-        "major": 3
-      }
-    },
-    {
-      "name": "not held: every fingerprint read all the same, no kind",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "deviceHold": false,
-      "deviceName": "Rae’s laptop",
-      "major": 3,
-      "start": false,
-      "identity": {
-        "fingerprint": "fingerprint-machine-own",
-        "kind": "machine",
-        "alternates": [
-          "fingerprint-hostname-alt"
-        ]
-      },
-      "expect": {
-        "token": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "fingerprint": "fingerprint-machine-own",
-        "fingerprints": [
-          "fingerprint-machine-own",
-          "fingerprint-hostname-alt"
-        ],
-        "name": "Rae’s laptop",
-        "major": 3
-      }
-    },
-    {
-      "name": "a fingerprint of no kind, nothing else",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "deviceHold": true,
-      "deviceName": "Rae’s laptop",
-      "major": 3,
-      "start": false,
-      "identity": {
-        "fingerprint": "fingerprint-machine-own",
-        "kind": null,
-        "alternates": []
-      },
-      "expect": {
-        "token": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "fingerprint": "fingerprint-machine-own",
-        "fingerprints": [
-          "fingerprint-machine-own"
-        ],
-        "name": "Rae’s laptop",
-        "major": 3
-      }
-    },
-    {
-      "name": "the host name read as the fingerprint",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "deviceHold": true,
-      "deviceName": "Rae’s laptop",
-      "major": 3,
-      "start": false,
-      "identity": {
-        "fingerprint": "fingerprint-hostname-alt",
-        "kind": "hostname",
-        "alternates": []
-      },
-      "expect": {
-        "token": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "fingerprint": "fingerprint-hostname-alt",
-        "fingerprintKind": "hostname",
-        "fingerprints": [
-          "fingerprint-hostname-alt"
-        ],
-        "name": "Rae’s laptop",
-        "major": 3
-      }
-    },
-    {
-      "name": "from status(), the machine id not read: nothing sent",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "deviceHold": true,
-      "deviceName": "Rae’s laptop",
-      "major": 3,
-      "start": false,
-      "identity": {
-        "fingerprint": null,
-        "kind": null,
-        "alternates": [
-          "fingerprint-hostname-alt"
-        ]
-      },
-      "expect": null
-    },
-    {
-      "name": "from startTrial(), the machine id not read: the host name",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "deviceHold": true,
-      "deviceName": "Rae’s laptop",
-      "major": 3,
-      "start": true,
-      "identity": {
-        "fingerprint": null,
-        "kind": null,
-        "alternates": [
-          "fingerprint-hostname-alt"
-        ]
-      },
-      "expect": {
-        "token": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "fingerprint": "fingerprint-hostname-alt",
-        "fingerprintKind": "hostname",
-        "fingerprints": [
-          "fingerprint-hostname-alt"
-        ],
-        "name": "Rae’s laptop",
-        "major": 3
-      }
-    },
-    {
-      "name": "from startTrial(), not held, the machine id not read: the host name",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "deviceHold": false,
-      "deviceName": "Rae’s laptop",
-      "major": 3,
-      "start": true,
-      "identity": {
-        "fingerprint": null,
-        "kind": null,
-        "alternates": [
-          "fingerprint-hostname-alt"
-        ]
-      },
-      "expect": {
-        "token": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "fingerprint": "fingerprint-hostname-alt",
-        "fingerprintKind": "hostname",
-        "fingerprints": [
-          "fingerprint-hostname-alt"
-        ],
-        "name": "Rae’s laptop",
-        "major": 3
-      }
-    },
-    {
-      "name": "from startTrial(), no fingerprint at all: nothing sent",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "deviceHold": true,
-      "deviceName": "Rae’s laptop",
-      "major": 3,
-      "start": true,
-      "identity": {
-        "fingerprint": null,
-        "kind": null,
-        "alternates": []
-      },
-      "expect": null
-    },
-    {
-      "name": "six fingerprints read: the first four sent",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "deviceHold": true,
-      "deviceName": "Rae’s laptop",
-      "major": 3,
-      "start": false,
-      "identity": {
-        "fingerprint": "fingerprint-machine-own",
-        "kind": "machine",
-        "alternates": [
-          "fingerprint-hostname-alt",
-          "fp-a2",
-          "fp-a3",
-          "fp-a4",
-          "fp-a5"
-        ]
-      },
-      "expect": {
-        "token": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "fingerprint": "fingerprint-machine-own",
-        "fingerprintKind": "machine",
-        "fingerprints": [
-          "fingerprint-machine-own",
-          "fingerprint-hostname-alt",
-          "fp-a2",
-          "fp-a3"
-        ],
-        "name": "Rae’s laptop",
-        "major": 3
-      }
-    },
-    {
-      "name": "one of 201 characters and an empty one left out, one of 200 kept",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "deviceHold": true,
-      "deviceName": "Rae’s laptop",
-      "major": 3,
-      "start": false,
-      "identity": {
-        "fingerprint": "fingerprint-machine-own",
-        "kind": "machine",
-        "alternates": [
-          "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-          "",
-          "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
-        ]
-      },
-      "expect": {
-        "token": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "fingerprint": "fingerprint-machine-own",
-        "fingerprintKind": "machine",
-        "fingerprints": [
-          "fingerprint-machine-own",
-          "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
-        ],
-        "name": "Rae’s laptop",
-        "major": 3
-      }
-    },
-    {
-      "name": "its own fingerprint over 200 characters: sent as the fingerprint, left out of the list",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "deviceHold": true,
-      "deviceName": "Rae’s laptop",
-      "major": 3,
-      "start": false,
-      "identity": {
-        "fingerprint": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
-        "kind": "machine",
-        "alternates": [
-          "fingerprint-hostname-alt"
-        ]
-      },
-      "expect": {
-        "token": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "fingerprint": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
-        "fingerprintKind": "machine",
-        "fingerprints": [
-          "fingerprint-hostname-alt"
-        ],
-        "name": "Rae’s laptop",
-        "major": 3
-      }
-    },
-    {
-      "name": "characters counted in UTF-16 units: 150 emoji are 300, left out; 100 are 200, kept",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "deviceHold": true,
-      "deviceName": "Rae’s laptop",
-      "major": 3,
-      "start": false,
-      "identity": {
-        "fingerprint": "fingerprint-machine-own",
-        "kind": "machine",
-        "alternates": [
-          "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
-          "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
-        ]
-      },
-      "expect": {
-        "token": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "fingerprint": "fingerprint-machine-own",
-        "fingerprintKind": "machine",
-        "fingerprints": [
-          "fingerprint-machine-own",
-          "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
-        ],
-        "name": "Rae’s laptop",
-        "major": 3
-      }
-    },
-    {
-      "name": "no device name: none sent",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "deviceHold": true,
-      "deviceName": null,
-      "major": 3,
-      "start": true,
-      "identity": {
-        "fingerprint": "fingerprint-machine-own",
-        "kind": "machine",
-        "alternates": [
-          "fingerprint-hostname-alt"
-        ]
-      },
-      "expect": {
-        "token": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "fingerprint": "fingerprint-machine-own",
-        "fingerprintKind": "machine",
-        "fingerprints": [
-          "fingerprint-machine-own",
-          "fingerprint-hostname-alt"
-        ],
-        "major": 3
-      }
-    },
-    {
-      "name": "an empty fingerprint left out",
-      "secret": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-      "deviceHold": true,
-      "deviceName": "Rae’s laptop",
-      "major": 3,
-      "start": false,
-      "identity": {
-        "fingerprint": "fingerprint-machine-own",
-        "kind": "machine",
-        "alternates": [
-          "",
-          "fingerprint-hostname-alt"
-        ]
-      },
-      "expect": {
-        "token": "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x1c",
-        "fingerprint": "fingerprint-machine-own",
-        "fingerprintKind": "machine",
-        "fingerprints": [
-          "fingerprint-machine-own",
-          "fingerprint-hostname-alt"
-        ],
-        "name": "Rae’s laptop",
-        "major": 3
-      }
     }
   ],
   "keyIds": [

@@ -136,39 +136,6 @@ pub fn parse_trial_body(json: Option<&Value>) -> Option<TrialBody> {
     })
 }
 
-/// A claim's answer ([`parse_claim_body`]): what of each member it can use.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct ClaimBody {
-    /// The key bought with the token, when it is a string.
-    pub key: Option<String>,
-    /// This device's activation on it, when it is a string.
-    pub activation_id: Option<String>,
-    /// The lease, when it is a string.
-    pub lease: Option<String>,
-    /// "Not bought yet": only a `pending` that is `true`.
-    pub pending: bool,
-    /// The answer's error word: only a string of at least one character.
-    pub error: Option<String>,
-}
-
-/// A claim's answer, keeping each member only when it is what it should be:
-/// the key, the activation id and the lease when they are strings, `pending`
-/// when it is `true`, the error when it is a word. Members it does not know
-/// are ignored, and a body that is not an object is nothing.
-pub fn parse_claim_body(json: Option<&Value>) -> ClaimBody {
-    let Some(map) = json.and_then(Value::as_object) else {
-        return ClaimBody::default();
-    };
-    let text = |name: &str| map.get(name).and_then(Value::as_str).map(str::to_owned);
-    ClaimBody {
-        key: text("key"),
-        activation_id: text("activationId"),
-        lease: text("lease"),
-        pending: map.get("pending") == Some(&Value::Bool(true)),
-        error: text("error").filter(|word| !word.is_empty()),
-    }
-}
-
 /// The smallest of the times given, or none when none is.
 pub fn earliest(values: &[Option<i64>]) -> Option<i64> {
     values.iter().flatten().copied().min()

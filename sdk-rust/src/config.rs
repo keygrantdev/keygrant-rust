@@ -8,7 +8,6 @@ use crate::adapters::{Adapters, Clock, Fingerprinter, HttpAdapter, RegistryStash
 use crate::device::IDENTIFY_GRACE;
 use crate::http::DEFAULT_HTTP_TIMEOUT;
 use crate::machine_id::{ACTIVATE_MACHINE_ID_TIMEOUT, MACHINE_ID_TIMEOUT};
-use crate::pickup::{os_random, RandomSource};
 use crate::wire::STATUS_CHECK_TIMEOUT;
 
 /// How long past its HTTP bound a call may hold the next one waiting: room
@@ -58,26 +57,6 @@ impl Default for Timings {
 /// .major(2)
 /// .device_name("Rae's MacBook Pro");
 /// ```
-///
-/// The purchase secret's random source is the platform's CSPRNG, and an app
-/// can neither read nor replace it:
-///
-/// ```compile_fail
-/// let config = keygrant::LicenseConfig::new("sluice", "https://api.test", "x");
-/// let _source = config.random;
-/// ```
-///
-/// ```compile_fail
-/// fn mine(bytes: &mut [u8]) -> std::io::Result<()> {
-///     bytes.fill(7);
-///     Ok(())
-/// }
-/// let _config = keygrant::LicenseConfig::new("sluice", "https://api.test", "x").random(mine);
-/// ```
-///
-/// ```compile_fail
-/// let _source = keygrant::pickup::os_random;
-/// ```
 #[derive(Clone)]
 #[non_exhaustive]
 pub struct LicenseConfig {
@@ -114,10 +93,6 @@ pub struct LicenseConfig {
     pub adapters: Adapters,
     #[doc(hidden)]
     pub timings: Timings,
-    /// Where a purchase secret's bytes come from: the platform's CSPRNG.
-    /// Not configuration, and out of an app's reach: only the crate's own
-    /// tests change it.
-    pub(crate) random: RandomSource,
 }
 
 impl fmt::Debug for LicenseConfig {
@@ -152,7 +127,6 @@ impl LicenseConfig {
             http_timeout: DEFAULT_HTTP_TIMEOUT,
             adapters: Adapters::default(),
             timings: Timings::default(),
-            random: os_random,
         }
     }
 
@@ -220,12 +194,6 @@ impl LicenseConfig {
     #[doc(hidden)]
     pub fn timings(mut self, timings: Timings) -> Self {
         self.timings = timings;
-        self
-    }
-
-    #[cfg(test)]
-    pub(crate) fn random(mut self, random: RandomSource) -> Self {
-        self.random = random;
         self
     }
 }

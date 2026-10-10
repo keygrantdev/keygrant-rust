@@ -7,9 +7,9 @@ use crate::device::activation_identity;
 use crate::engine::{GuardSave, Holder};
 use crate::error::{ActivateError, ActivateResult, Error};
 use crate::offline::{
-    held_elsewhere, same_key, standing_refusal, unkeyed, Asked, Basis, DeviceView, LeaseCheck,
+    activation_patch, held_elsewhere, same_key, standing_refusal, unkeyed, Activation, Asked,
+    Basis, DeviceView, LeaseCheck,
 };
-use crate::pickup::{activation_patch, no_purchase, Activation};
 use crate::state::{present, Patch, StoredState};
 use crate::status::{DeactivateResult, DeviceKind, LicenseError, Refusal};
 use crate::wire::{entered_key, error_of, map_server_error, parse_lease_body};
@@ -64,9 +64,6 @@ impl License {
         let LeaseCheck::Ok { claims, .. } = self.engine.evaluate(&lease, now, &holder) else {
             return Err(LicenseError::InvalidLease.into());
         };
-        // As a bought key's claim saves one (pickup.rs `activation_patch`),
-        // the purchase secret cleared too: else a later deactivate would let a
-        // pending pickup activate the device again.
         let patch = activation_patch(&Activation {
             key: &entered,
             activation_id: &activation_id,
@@ -133,7 +130,7 @@ impl License {
                 .is_ok_and(|response| response.status == 200);
         }
         // Stamped, so that an answer to an older ask is not saved over it.
-        let patch = unkeyed().then(no_purchase()).then(Patch {
+        let patch = unkeyed().then(Patch {
             verdict_at: Some(Some(self.engine.effective_now(&state))),
             ..Patch::default()
         });

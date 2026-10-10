@@ -6,7 +6,6 @@ use crate::engine::Holder;
 use crate::offline::{
     ask_due, kept_with, lease_status, standing_refusal, About, Basis, DeviceView, LeaseCheck,
 };
-use crate::purchases::{Pickup, PickupAsk};
 use crate::renewal::{asks_on_valid_lease, ValidLeaseAsk};
 use crate::state::{present, Patch, StoredState};
 use crate::status::{LicenseState, LicenseStatus, Refusal};
@@ -41,24 +40,8 @@ impl License {
         if let (Some(_), Some(lease)) = (key, present(&state.lease)) {
             return self.license_status(state, lease, now, force_online, read_only);
         }
-        // No licence held: a key bought through `purchase_url` is picked up
-        // first (purchases.rs `pick_up`), never read-only.
-        let picked = if read_only {
-            Pickup::State(Box::new(state.clone()))
-        } else {
-            let ask = PickupAsk {
-                start: false,
-                force: force_online,
-                device: None,
-            };
-            self.pick_up(state, ask)
-        };
-        let state = match picked {
-            Pickup::Bought(status) => return status,
-            Pickup::State(state) => state,
-        };
         if state.trial_start.is_some() {
-            return self.trial_status_asking(&state, now, force_online, read_only);
+            return self.trial_status_asking(state, now, force_online, read_only);
         }
         LicenseStatus::new(LicenseState::Unlicensed)
     }

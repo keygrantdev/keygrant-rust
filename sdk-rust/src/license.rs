@@ -12,10 +12,9 @@ use crate::engine::Engine;
 use crate::error::{ActivateError, ActivateResult, ConfigError, Error, MissingEntitlement};
 use crate::lease::grants;
 use crate::offline::Basis;
-use crate::purchases::{Pickup, PickupAsk};
 use crate::state::{present, Patch};
 use crate::status::{DeactivateResult, LicenseError, LicenseReason, LicenseState, LicenseStatus};
-use crate::url::{is_absolute_link, referenced_link};
+use crate::url::referenced_link;
 use crate::wire::{trim_to_length, MAX_DEVICE_NAME};
 
 /// Client-side licensing for a desktop app.
@@ -40,11 +39,7 @@ use crate::wire::{trim_to_length, MAX_DEVICE_NAME};
 ///    that stands for this build: to give the server the chance to heal it;
 ///  - a trial whose lease does not verify here while its stored end is still
 ///    ahead (a lease signed before the product's key was rotated, say): the
-///    trial is asked for again, bounded to 5 seconds;
-///  - no key held and a purchase secret held (`purchase_url`): the key bought
-///    with it is asked for (`claim`) for a day after the link was handed
-///    out, once 5 minutes have passed since the last ask, and only under
-///    this device's own fingerprint, bounded to 5 seconds.
+///    trial is asked for again, bounded to 5 seconds.
 ///
 /// And a running trial reports its launch, at most once a day, on a thread
 /// of its own that no call waits on.
@@ -136,36 +131,6 @@ impl License {
             .ok_or(Error::InvalidUrl)
     }
 
-    /// `payment_link_url` with a PURCHASE REFERENCE as its
-    /// `client_reference_id`, or `None` while the device holds a key (any
-    /// key: use [`upgrade_url`](Self::upgrade_url), or the plain link). Send a
-    /// customer with no key there to buy: the checkout keeps the reference on
-    /// the key it mints, and once they are back the SDK asks for that key (at
-    /// once on `refresh()` or `start_trial()`, and from `status()` for a day
-    /// after the link), activates this device on it and answers `Licensed`,
-    /// with nothing typed.
-    ///
-    /// The reference is a hash of a one-time secret (256 bits from the
-    /// platform's CSPRNG, never the fingerprint) that stays on the device and
-    /// is sent only in that ask, so a link that leaks claims nothing. The
-    /// secret is made the first time, kept, and its link handed out again by
-    /// every later call; it is dropped 30 days after the last one, or once a
-    /// key bought with it is picked up. Fails with [`Error::InvalidUrl`] when
-    /// the link is not an absolute `http`/`https` URL (before anything is
-    /// read), [`Error::Storage`] when the state cannot be read or the secret
-    /// cannot be saved (a link whose secret is not kept could never be picked
-    /// up), and [`Error::Random`] when no secret can be made. Runs one call
-    /// at a time like the calls that write: behind a call that has not
-    /// finished, a held secret's link is answered as it is, and with none
-    /// held it fails with [`Error::Busy`].
-    pub fn purchase_url(&self, payment_link_url: &str) -> Result<Option<String>, Error> {
-        if !is_absolute_link(payment_link_url) {
-            return Err(Error::InvalidUrl);
-        }
-        self.engine
-            .serial(|read_only| self.purchase_url_now(payment_link_url, read_only))
-    }
-
     /// Release this device's activation and drop the local licence, saying
     /// whether the seat is now free ([`DeactivateResult::released`]): true
     /// when KeyGrant answered the release with a 200, or when there was no
@@ -252,10 +217,7 @@ impl License {
     /// storage: `Unknown` when the state cannot be read, and the server's
     /// trial when it cannot be saved.
     pub fn start_trial(&self) -> LicenseStatus {
-        // It may make two requests (a claim bounded by the status check, then
-        // the trial ask): the calls behind it wait that much longer.
-        let extra = self.engine.timings.status_check;
-        self.engine.serial_longer(extra, |read_only| {
+        self.engine.serial(|read_only| {
             let Some(state) = self.load_for_status(read_only) else {
                 return if read_only {
                     stalled(unreadable())
@@ -264,21 +226,11 @@ impl License {
                 };
             };
             if !read_only {
-                // The device read once, given an activation's time, for both asks.
+                // The device read given an activation's time.
                 let device = self
                     .engine
                     .device(self.engine.timings.activate_machine_id, state.device_kind);
-                // A key bought through `purchase_url` is asked for first;
-                // bought, it is the answer, and no trial is asked.
-                let ask = PickupAsk {
-                    start: true,
-                    force: true,
-                    device: Some(&device),
-                };
-                return match self.pick_up(&state, ask) {
-                    Pickup::Bought(status) => status,
-                    Pickup::State(state) => self.start_trial_now(&state, &device),
-                };
+                return self.start_trial_now(&state, &device);
             }
             stalled(self.trial_status(&state, self.engine.effective_now(&state)))
         })

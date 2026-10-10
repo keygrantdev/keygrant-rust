@@ -31,10 +31,6 @@ use keygrant::offline::{
     trial_lease_valid, trial_status_of, unkeyed, About, Asked, Basis, DeviceView, LeaseCheck,
     LeaseFailure, LeaseHolder, SignedAt, Stamp,
 };
-use keygrant::pickup::{
-    no_purchase, PurchaseOf, CLAIM_EAGER_MS, CLAIM_WAIT_MS, MAX_CLAIM_FINGERPRINTS,
-    MAX_CLAIM_FINGERPRINT_LENGTH, PURCHASE_REFERENCE_PREFIX, PURCHASE_TOKEN_MS,
-};
 use keygrant::renewal::{asks_on_valid_lease, renewal_outcome, RenewalInput, ValidLeaseAsk};
 use keygrant::storage::{KEEP_CORRUPT, STALE_TEMP_MS, UPDATE_ATTEMPTS};
 use keygrant::wire::{
@@ -119,18 +115,17 @@ fn every_number_in_the_file_is_read_as_the_nearest_double() {
     }
 }
 
-/// The purchase groups, after every other one, answered in
-/// `conformance/purchase.rs`.
-#[path = "conformance/purchase.rs"]
-mod purchase;
+/// The groups after the first ones, answered in `conformance/later.rs`.
+#[path = "conformance/later.rs"]
+mod later;
 
-/// The key-set groups, after the purchase groups, answered in
+/// The key-set groups, after the later groups, answered in
 /// `conformance/keys.rs`.
 #[path = "conformance/keys.rs"]
 mod keys;
 
 /// Every group this harness answers, in the file's order.
-const GROUPS: [&str; 46] = [
+const GROUPS: [&str; 40] = [
     "leases",
     "trials",
     "fingerprintClaims",
@@ -166,14 +161,8 @@ const GROUPS: [&str; 46] = [
     "trialLeaseStatuses",
     "entitlementNumbers",
     "majors",
-    "purchaseUrls",
-    "purchaseTokenKept",
-    "claimDue",
-    "parseClaimBody",
-    "claimOutcomes",
+    "referencedLinks",
     "trialReportDue",
-    "purchaseReferences",
-    "claimBodies",
     "keyIds",
     "keySets",
     "grants",
@@ -333,13 +322,7 @@ fn constants_are_the_references() {
         "STALE_TEMP_MS": STALE_TEMP_MS as i64,
         "UPDATE_ATTEMPTS": UPDATE_ATTEMPTS,
         "UNKNOWN_HOST": UNKNOWN_HOST,
-        "CLAIM_WAIT_MS": CLAIM_WAIT_MS,
-        "PURCHASE_TOKEN_MS": PURCHASE_TOKEN_MS,
         "TRIAL_REPORT_MS": TRIAL_REPORT_MS,
-        "PURCHASE_REFERENCE_PREFIX": PURCHASE_REFERENCE_PREFIX,
-        "CLAIM_EAGER_MS": CLAIM_EAGER_MS,
-        "MAX_CLAIM_FINGERPRINTS": MAX_CLAIM_FINGERPRINTS,
-        "MAX_CLAIM_FINGERPRINT_LENGTH": MAX_CLAIM_FINGERPRINT_LENGTH,
     });
     assert_eq!(*c, expected);
 }
@@ -648,7 +631,6 @@ fn patches() {
         match text(&vector["patch"], "patch") {
             "LEASED" => encoded(&leased()),
             "UNKEYED" => encoded(&unkeyed()),
-            "NO_PURCHASE" => encoded(&no_purchase()),
             other => panic!("unknown patch {other:?}"),
         }
     });
@@ -677,10 +659,6 @@ fn basis(value: &Value) -> Basis {
         trial: part("trial").map(|trial| Stamp {
             at: int(&trial["at"]),
             seen: opt_int(&trial["seen"]),
-        }),
-        purchase: part("purchase").map(|purchase| PurchaseOf {
-            token: text(&purchase["token"], "basis.purchase.token").to_owned(),
-            at: opt_int(&purchase["at"]),
         }),
     }
 }

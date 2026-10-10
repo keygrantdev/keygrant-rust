@@ -21,8 +21,8 @@ pub use lease_check::{
     trial_lease_valid, LeaseCheck, LeaseFailure, LeaseHolder, TrialLease,
 };
 pub use merge::{
-    leased, merged, outdated, superseded, trial_only, unkeyed, without_verdict, About, Asked,
-    Basis, Stamp, Superseded,
+    activation_patch, leased, merged, outdated, superseded, trial_only, unkeyed, without_verdict,
+    About, Activation, Asked, Basis, Stamp, Superseded,
 };
 
 /// How long after the server answered without a lease (a refusal, a 5xx, a
@@ -43,8 +43,8 @@ pub const CLOCK_TOLERANCE_MS: i64 = 60 * 60_000;
 
 /// The major a build runs as: the configured one, read as the server reads a
 /// version (0.x as 1, and majors from 1 up). So a build configured as major 0
-/// is major 1 everywhere the SDK uses the major (sent with `activate`,
-/// `validate` and `claim`, and judged by `check_lease`, `kept_with` and
+/// is major 1 everywhere the SDK uses the major (sent with `activate` and
+/// `validate`, and judged by `check_lease`, `kept_with` and
 /// `standing_refusal`), rather than refused offline as outdated by every lease.
 /// The reference also cuts a fraction and reads a value that is not a finite
 /// number as 1; a `u32` holds neither.

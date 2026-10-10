@@ -85,11 +85,13 @@ macro_rules! state_fields {
         ///
         /// Serialised with the reference's camelCase names, absent fields left
         /// out. Fields this SDK does not know are kept in [`extra`](Self::extra)
-        /// and written back as they were.
+        /// and written back as they were, but for the few an earlier version
+        /// stored and this one retired, which are neither read nor written.
         #[derive(Debug, Clone, Default, PartialEq)]
         pub struct StoredState {
             $( $(#[doc = $doc])* pub $field: Option<$ty>, )*
             /// Fields this SDK does not know (a newer SDK's), kept as they were.
+            /// A retired field's name here is never written.
             pub extra: Map<String, Value>,
         }
 
@@ -102,6 +104,12 @@ macro_rules! state_fields {
 
         /// Every field's stored name, in order.
         pub(crate) const FIELD_NAMES: &[&str] = &[$($json),*];
+
+        /// What an earlier version stored to buy from the app with no key
+        /// typed (its purchase secret and the two stamps beside it). Retired:
+        /// not read, not even into [`extra`](StoredState::extra), and never
+        /// written, whatever `extra` holds, so the next save clears them.
+        pub(crate) const RETIRED_FIELDS: &[&str] = &["purchaseToken", "purchaseTokenAt", "claimAskedAt"];
 
         impl StoredState {
             /// The state a JSON value holds: none for `null`, an empty state
@@ -116,7 +124,7 @@ macro_rules! state_fields {
                 let mut state = StoredState::default();
                 $( state.$field = map.get($json).and_then(<$ty as Field>::from_json); )*
                 for (name, item) in map {
-                    if !FIELD_NAMES.contains(&name.as_str()) {
+                    if !FIELD_NAMES.contains(&name.as_str()) && !RETIRED_FIELDS.contains(&name.as_str()) {
                         state.extra.insert(name.clone(), item.clone());
                     }
                 }
@@ -128,7 +136,7 @@ macro_rules! state_fields {
                 let mut map = Map::new();
                 $( if let Some(value) = &self.$field { map.insert($json.to_owned(), Field::to_json(value)); } )*
                 for (name, item) in &self.extra {
-                    if !FIELD_NAMES.contains(&name.as_str()) {
+                    if !FIELD_NAMES.contains(&name.as_str()) && !RETIRED_FIELDS.contains(&name.as_str()) {
                         map.insert(name.clone(), item.clone());
                     }
                 }
@@ -239,17 +247,6 @@ state_fields! {
     device_kind: DeviceKind = "deviceKind";
     /// When (guarded device clock, ms) the stored server answer was asked for.
     verdict_at: i64 = "verdictAt";
-    /// The one-time purchase SECRET `purchase_url` keeps (43 URL-safe
-    /// characters: 256 random bits), sent only in the claim; its link carries
-    /// a hash of it. Held while no key is, until a key bought with it is
-    /// picked up, the server answers that it never will be, or 30 days have
-    /// passed since its link was last handed out.
-    purchase_token: String = "purchaseToken";
-    /// When (guarded device clock, ms) `purchase_url` last handed its link out.
-    purchase_token_at: i64 = "purchaseTokenAt";
-    /// When (device clock, ms) the claim was last asked and brought no key
-    /// back: `status()` asks again on its own 5 minutes after.
-    claim_asked_at: i64 = "claimAskedAt";
     /// When (guarded device clock, ms) a running trial last reported its
     /// launch: at most once a day, a trial answer (`trialAt`) counting as one.
     trial_reported_at: i64 = "trialReportedAt";
