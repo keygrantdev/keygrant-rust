@@ -17,6 +17,11 @@ use keygrant::{
 };
 use serde_json::{json, Map, Value};
 
+mod files;
+// Used by the licence-file suites only; every suite includes this module.
+#[allow(unused_imports)]
+pub use files::*;
+
 pub const NOW: i64 = 1_757_000_000_000;
 pub const DAY: i64 = 86_400_000;
 pub const PRODUCT: &str = "sluice";

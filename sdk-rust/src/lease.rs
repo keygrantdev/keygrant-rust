@@ -5,7 +5,6 @@
 //! Verification checks the signature first, then the claims' shape, then the
 //! expiry, exactly as the server's own verifier does.
 
-use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -30,7 +29,9 @@ pub(crate) use base64::b64url_decode_canonical;
 use base64::{b64url_decode, b64url_encode};
 use claims::parse_claims;
 pub use claims::{entitlements_of, grants, Entitlement, LeaseClaims, LicenseModel};
+pub(crate) use claims::{optional, string};
 use keys::kid_of;
+pub(crate) use keys::named_kid;
 pub use keys::{KeyError, KeySet, PublicKey};
 
 /// Why a lease did not verify.
@@ -150,15 +151,11 @@ pub fn verify_lease(token: &str, keys: &KeySet, now_ms: i64) -> VerifyResult {
     if candidates.is_empty() {
         return invalid(VerifyFailure::UnknownKey);
     }
-    let Ok(signature) = Signature::from_slice(&signature) else {
-        return invalid(VerifyFailure::BadSignature);
-    };
     let signed = format!("{header}.{payload}");
-    if !candidates.iter().any(|key| {
-        // Bytes that are not a point on the curve verify nothing.
-        VerifyingKey::from_bytes(&key.0)
-            .is_ok_and(|key| key.verify(signed.as_bytes(), &signature).is_ok())
-    }) {
+    if !candidates
+        .iter()
+        .any(|key| key.verifies(signed.as_bytes(), &signature))
+    {
         return invalid(VerifyFailure::BadSignature);
     }
     let claims = b64url_decode_canonical(payload)
@@ -180,7 +177,7 @@ pub fn verify_lease(token: &str, keys: &KeySet, now_ms: i64) -> VerifyResult {
 /// Bytes as text the way JavaScript's `TextDecoder` (UTF-8, the default)
 /// reads them: one leading byte-order mark dropped, and anything that is not
 /// UTF-8 replaced with U+FFFD.
-fn decode_utf8(bytes: &[u8]) -> String {
+pub(crate) fn decode_utf8(bytes: &[u8]) -> String {
     let text = String::from_utf8_lossy(bytes);
     text.strip_prefix('\u{FEFF}').unwrap_or(&text).to_owned()
 }

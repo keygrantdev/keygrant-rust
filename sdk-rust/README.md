@@ -28,7 +28,7 @@ The full guide is at https://keygrant.dev/docs.
 
 ```toml
 [dependencies]
-keygrant = "0.4"
+keygrant = "0.5"
 ```
 
 or `cargo add keygrant`.
@@ -172,15 +172,136 @@ fn main() {
 
 `LicenseStatus` serialises exactly as the Electron SDK's (camelCase, absent
 fields left out, `test` and `stalled` only when true, `entitlements` only when
-there are any), so a front end written for the Electron SDK reads it
+there are any, `source` and `licensedTo` only from a licence file), so a front end written for the Electron SDK reads it
 unchanged:
 
 ```json
 { "state": "trial", "trialEndsAt": 1790432000000, "trialDaysLeft": 5 }
 ```
 
-`DeactivateResult` serialises as the Electron SDK's (`{"released": true}`), and
-`ActivateError` and `Error` implement `Serialize` as their word.
+`DeactivateResult` serialises as the Electron SDK's (`{"released": true}`),
+`ImportedLicenseFile` as its `{"kind": ..., "licensedTo": ...}`, and
+`ActivateError`, `ImportError` and `Error` implement `Serialize` as their word.
+
+## Licence files: drag and drop
+
+A licence can come as a file (`.kglicense`) the customer drops onto the app or
+opens from its licence screen. A **key file** carries their key: importing it
+activates the key online, exactly as typing it would. An **offline licence
+file** licenses the app with no network at all, for good, on machines that
+never connect; it has no seat limit and cannot be revoked, so the only way to
+stop one that leaked is an app update that lists its id:
+
+```rust
+use std::sync::Arc;
+
+use std::io::Read;
+use std::path::Path;
+
+use keygrant::license_file::MAX_LICENSE_FILE_BYTES;
+use keygrant::{ImportedLicenseFile, License, LicenseConfig, LICENSE_FILE_EXTENSION};
+use tauri::{DragDropEvent, Emitter, WindowEvent};
+
+const PUBLIC_KEYS: &str = include_str!("../keygrant-keys.json");
+
+// The front end hands over a file's bytes: from a drop on a web view, or an
+// <input type="file" accept=".kglicense">, as Array.from(new Uint8Array(await file.arrayBuffer())).
+#[tauri::command]
+async fn import_license_file(
+    license: tauri::State<'_, Arc<License>>,
+    bytes: Vec<u8>,
+) -> Result<ImportedLicenseFile, String> {
+    let license = Arc::clone(&license);
+    tauri::async_runtime::spawn_blocking(move || license.import_license_file(bytes))
+        .await
+        .map_err(|e| e.to_string())?
+        // "malformed", "not-a-license-file", "bad-signature", "unknown-key",
+        // "wrong-product", "revoked-file", "upgrade", "outdated"; for a key file
+        // what activate() answers; "storage" or "busy": try again.
+        .map_err(|e| e.code().to_owned())
+}
+
+/// A file's first `limit` bytes at most.
+fn read_at_most(path: &Path, limit: usize) -> std::io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    std::fs::File::open(path)?.take(limit as u64).read_to_end(&mut bytes)?;
+    Ok(bytes)
+}
+
+fn main() {
+    let license = Arc::new(
+        License::new(
+            LicenseConfig::new("sluice", "https://api.keygrant.dev", PUBLIC_KEYS)
+                .major(3)
+                // Ids of files that leaked: an update adds them here.
+                .revoked_license_files(["lf_8Hq2"]),
+        )
+        .expect("the licence configuration is the developer's to fix"),
+    );
+    let on_drop = Arc::clone(&license);
+    tauri::Builder::default()
+        .manage(license)
+        .invoke_handler(tauri::generate_handler![import_license_file])
+        .on_window_event(move |window, event| {
+            // A file dropped on the window, read here: the SDK takes content, never a path.
+            if let WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) = event {
+                let dropped = paths.iter().find(|path| {
+                    path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+                        e.eq_ignore_ascii_case(LICENSE_FILE_EXTENSION.trim_start_matches('.'))
+                    })
+                });
+                if let Some(path) = dropped.cloned() {
+                    let license = Arc::clone(&on_drop);
+                    let window = window.clone();
+                    tauri::async_runtime::spawn_blocking(move || {
+                        // Never more than a licence file can be: a larger one is refused unread.
+                        let imported = read_at_most(&path, MAX_LICENSE_FILE_BYTES + 1)
+                            .map_err(|e| e.to_string())
+                            .and_then(|bytes| {
+                                license.import_license_file(bytes).map_err(|e| e.code().to_owned())
+                            });
+                        let _ = window.emit("license-file", imported);
+                    });
+                }
+            }
+        })
+        .run(tauri::generate_context!())
+        .expect("error while running the app");
+}
+```
+
+In plain Rust, read the file and hand over its bytes:
+`license.import_license_file(std::fs::read(path)?)`.
+
+`import_license_file` takes the file's content (`&str`, `String`, `&[u8]` or
+`Vec<u8>`), never its path, and verifies it offline: signed by a key of
+`public_jwk`, for this product, and, for an offline file, covering this build's
+major. It answers `Ok(ImportedLicenseFile { kind, licensed_to })` (`kind` is
+`LicenseFileKind::Key` or `Offline`), or `Err(ImportError::File(_))` with one
+of the `LicenseFileError`s `Malformed`, `NotALicenseFile`, `BadSignature`,
+`UnknownKey`, `WrongProduct`, `RevokedFile`, `Upgrade`, `Outdated`, nothing
+stored. A key file's activation answers as `activate()` does
+(`Err(ImportError::License(_))`). `Err(ImportError::Busy)` when a licence call
+before it has not finished, and `Err(ImportError::Storage(_))` when the state
+cannot be read or the file cannot be saved: try again. `UnknownKey` means the
+file was signed by a key this build does not carry: a newer one, after the
+product rotated its key, which an update of the app carries. A key file's notes
+print its key, which can be typed meanwhile.
+
+An offline file is kept and checked again on every `status()`, which then
+answers `Licensed` with `source: Some(LicenseSource::File)`, the key,
+`licensed_to` and the file's entitlements, never asking the server,
+`refresh()` included. Show "Licensed to Ada Lovelace" from `licensed_to`. A
+status from a file has no seat to deactivate: offer `remove_license_file()`
+instead (`deactivate()` leaves the file alone). If the device also holds a
+key, a file that covers this build wins, and the key keeps working once the
+file is removed, revoked or outgrown. A file that does not cover this build
+answers only when no key and no running trial does.
+
+**Keep every key that signed a file in your builds.** A file names the key that
+signed it and never expires, so a key that has signed one stays in the
+product's key set, and in `public_jwk`, after it stops signing leases. A build
+without it reads such a file as `Invalid` / `UnknownKey`.
 
 ## Buying from the app
 
@@ -208,6 +329,8 @@ upgrades.
 | `activate(key)` | Activates the key on this device. The key is trimmed and upper-cased first. `Err(ActivateError::License(_))` or `Err(ActivateError::Storage(_))`. |
 | `deactivate()` | Releases the seat and drops the local licence, keeping the trial evidence. `Ok(DeactivateResult { released })`: `released` is true when KeyGrant answered the release with a 200, or when there was no activation to release; false when it could not be asked or answered anything else (a 5xx, a 429, a proxy's page), so the seat may still be held and the app should say so. The local licence is dropped either way. An activation that is another device's (a state file copied or restored from another PC: a device refusal that stands for this device, or a lease, expired or not, held to a machine id this device can tell is not its own) is never released, as releasing it would lock that PC out: it is dropped here, and the answer is `released: true`. `Err(Error::Busy)` behind a call that has not finished, and `Err(Error::Storage(_))` when the state cannot be read, release nothing. `Err(Error::Storage(_))` when the state cannot be saved comes after the release was asked for: the seat may already be free while the device still holds the key, so try again (the release is idempotent: the retry answers `released: true` and drops the key). |
 | `start_trial()` | Starts (or re-syncs) this device's trial. Never fails; the server's trial is answered even when it cannot be saved. An answer whose trial lease this build cannot verify (signed with a key the product rotated to ahead of this build) never replaces a stored trial lease it can: the stored one is kept, so the running trial does not end. An answer with no lease (the trial is over) is taken as it is. |
+| `import_license_file(content)` | Takes a licence file's content, verified offline: an offline file is stored and licenses the app with no network; a key file's key is activated as `activate` would. See [Licence files](#licence-files-drag-and-drop). |
+| `remove_license_file()` | Drops the stored offline licence file; a key the device holds keeps working. `Err(Error::Busy)` or `Err(Error::Storage(_))`. |
 | `upgrade_url(link)` | The payment link with this device's **activation id** (never the key) as `client_reference_id`, so an upgrade checkout extends the key the customer holds. `Ok(None)` without an activation. |
 
 ### Configuration
@@ -221,6 +344,7 @@ upgrades.
 | `device_name` | none | A label for the device list; cut to 120 UTF-16 units. |
 | `device_hold` | `true` | See below. |
 | `http_timeout` | 15 s | The bound on every request that names no shorter one. Kept by the SDK whatever the HTTP adapter does. |
+| `revoked_license_files` | none | The ids of licence files this build refuses (an offline file that leaked), matched exactly. |
 | `adapters` | defaults | `storage`, `registry`, `clock`, `fingerprint`, `http`. |
 
 Each has a builder method of the same name (`.major(3)`, `.storage(...)`, ...).
@@ -229,18 +353,19 @@ Each has a builder method of the same name (`.major(3)`, `.storage(...)`, ...).
 
 | `state` | `reason` | What to do |
 |---|---|---|
-| `Licensed` | | Run. `test` is true on a TEST licence (refuse those in a release build if you like). |
+| `Licensed` | | Run. `test` is true on a TEST licence (refuse those in a release build if you like). With `source: Some(LicenseSource::File)`, from a stored offline licence file: show `licensed_to`. |
 | `Trial` | | Run; `trial_days_left` and `trial_ends_at` say how long. A trial runs only while its signed trial lease is valid, to the end that lease was signed to: the end stored in the state file is unsigned, so editing it extends nothing. |
 | `Expired` | `Offline` | The lease ran out and the server could not be reached. Ask the customer to go online; `refresh()`. |
 | `Expired` | `Trial` | The trial has ended (or there is no valid trial lease to run it on): offer to buy. |
 | `Invalid` | `Revoked` | The key was revoked, expired, or this device was released. |
-| `Invalid` | `Upgrade` | This build is newer than the key covers: offer the upgrade (`upgrade_url`). |
-| `Invalid` | `Outdated` | This build is older than the key covers: update the app. |
-| `Invalid` | `Device` | The licence was activated on another device (this machine changed, or the licence file was copied): activate again here. |
-| `Invalid` | `Tampered` | The stored lease is not for this licence. Activate again. |
-| `Invalid` | `UnknownKey` | The stored lease is signed by a key this build does not carry. Online, the server renews it with the key it signs with now; when it stays so online, the build does not carry the product's signing key: update the app. |
+| `Invalid` | `Upgrade` | This build is newer than the key covers: offer the upgrade (`upgrade_url`). From a licence file (`source` `File`): newer than the file covers; the customer needs a file (or a key) for this version. |
+| `Invalid` | `Outdated` | This build is older than the key covers: update the app. From a licence file, older than the file covers: update the app. |
+| `Invalid` | `Device` | The licence was activated on another device (this machine changed, or the state file was copied): activate again here. |
+| `Invalid` | `Tampered` | The stored lease is not for this licence. Activate again. From a licence file, the stored file is not one (the state file was edited): import it again, or remove it. |
+| `Invalid` | `UnknownKey` | The stored lease is signed by a key this build does not carry. Online, the server renews it with the key it signs with now; when it stays so online, the build does not carry the product's signing key: update the app. From a licence file, no renewal comes: update the app, or ask for the same licence's file signed again. |
+| `Invalid` | `RevokedFile` | The stored offline licence file is one this build lists as revoked (`source` is `File`). |
 | `Unlicensed` | | No licence and no trial. |
-| `Unknown` | `Storage` | The licence file could not be read just now (an antivirus scan holding it). Keep running and ask again shortly; never show the activation screen for it. |
+| `Unknown` | `Storage` | The state file could not be read just now (an antivirus scan holding it). Keep running and ask again shortly; never show the activation screen for it. |
 
 `status.permits_use()` is true for `Licensed`, `Trial` and `Unknown`;
 `status.is_entitled()` for `Licensed` and `Trial`. `stalled: true` means an
@@ -473,7 +598,10 @@ server, entitlements included (`lease_status`, `trial_lease_of` and
 (`lease::entitlements_of`), as well as the lease checks, the patches, the merge,
 the clock guard, the wire and the machine-id reads, and the groups after them
 (`major_of`, `referenced_link` and `trial_report_due`, answered in
-`tests/conformance/later.rs`). A
+`tests/conformance/later.rs`; the key sets, in `tests/conformance/keys.rs`;
+and the licence files, `license_file_token`, `verify_license_file`,
+`check_license_file` and `license_file_status`, in
+`tests/conformance/files.rs`). A
 status's entitlement numbers are compared as numbers, as the file says (`5` and
 `5.0` alike), and exactly: the `entitlementNumbers` group pins the bits each
 number written as the server writes it must read as, and the harness checks
@@ -501,7 +629,11 @@ the reasons below.
   returns an `Err`: `activate()` gives `ActivateError::Storage` where the
   reference rejects with the file's error, `deactivate()` gives
   `Error::Storage` or `Error::Busy` ("a previous licence call has not
-  finished"), and `upgrade_url()` gives `Error::Storage` or `Error::InvalidUrl`.
+  finished"), `upgrade_url()` gives `Error::Storage` or `Error::InvalidUrl`,
+  and `import_license_file()` gives `ImportError::Busy` or
+  `ImportError::Storage` where the reference rejects, and its refusals as
+  `ImportError::File` and `ImportError::License` where the reference resolves
+  `{ ok: false, error }`.
 - A running trial's launch report is sent on a thread of its own (the
   reference sends it as a promise it never awaits). The thread shares the
   `License`'s adapters, all `Send + Sync`; a test waits for it through a
@@ -572,7 +704,9 @@ the reasons below.
 - A stored field of the wrong type reads as absent instead of failing; a
   fractional millisecond is cut to a whole one; a stored JSON value that is not
   an object reads as an empty state. Fields this SDK does not know are kept and
-  written back, as the reference's object spread keeps them.
+  written back, as the reference's object spread keeps them. So a stored
+  `licenseFile` that is not text is no licence file here, where the reference
+  reads it as `Invalid` / `Tampered`: either way it licenses nothing.
 
 **Unreachable in practice.**
 
@@ -584,9 +718,9 @@ the reasons below.
   `identities` vectors). The reference reads it a second time for that
   fingerprint, after the machine-id read, so only a rename between the two
   reads would tell them apart.
-- A lease payload is read as the reference reads it (one leading byte-order
-  mark dropped, as `TextDecoder` drops it; bytes that are not UTF-8 replaced),
-  then parsed as JSON. Three payloads `JSON.parse` takes and `serde_json` does
+- A lease payload, and a licence file's, is read as the reference reads it
+  (one leading byte-order mark dropped, as `TextDecoder` drops it; bytes that
+  are not UTF-8 replaced), then parsed as JSON. Three payloads `JSON.parse` takes and `serde_json` does
   not are bad claims here and may be valid there: a string holding a lone
   UTF-16 surrogate escape (`"\ud800"`), a number too large for a double
   (`1e400`, which `JSON.parse` reads as `Infinity` and the schema allows in

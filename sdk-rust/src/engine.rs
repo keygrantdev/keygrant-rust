@@ -23,6 +23,7 @@ use crate::error::ConfigError;
 use crate::fingerprint::DefaultFingerprinter;
 use crate::http::UreqHttp;
 use crate::lease::{verify_lease, KeySet, VerifyResult};
+use crate::license_file::{check_license_file, verify_license_file, LicenseFileCheck};
 use crate::offline::{
     check_lease, guarded_now, major_of, merged, saved_last_seen, trial_lease_of, Basis, LeaseCheck,
     LeaseHolder, TrialLease,
@@ -70,6 +71,8 @@ pub(crate) struct Engine {
     pub major: i64,
     base: String,
     keys: KeySet,
+    /// The ids of licence files this build refuses.
+    revoked_files: Vec<String>,
     pub storage: Arc<dyn StorageAdapter>,
     pub registry: Arc<dyn RegistryStash>,
     pub clock: Arc<dyn Clock>,
@@ -142,6 +145,7 @@ impl Engine {
             major: major_of(config.major),
             base,
             keys,
+            revoked_files: config.revoked_license_files.clone(),
             storage,
             registry: adapters.registry.unwrap_or_else(|| Arc::new(NoopRegistry)),
             clock: adapters.clock.unwrap_or_else(|| Arc::new(SystemClock)),
@@ -184,6 +188,18 @@ impl Engine {
 
     pub fn verify(&self, lease: &str, now: i64) -> VerifyResult {
         verify_lease(lease, &self.keys, now)
+    }
+
+    /// A licence file's token verified against the build's key set and judged
+    /// for this product, this build and the app's denylist
+    /// (license_file.rs `check_license_file`).
+    pub fn check_file(&self, token: &str) -> LicenseFileCheck {
+        check_license_file(
+            &verify_license_file(token, &self.keys),
+            &self.product,
+            self.major,
+            &self.revoked_files,
+        )
     }
 
     /// A licence lease verified offline and held to this product and build,

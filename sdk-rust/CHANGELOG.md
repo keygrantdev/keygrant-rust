@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.0
+
+- Licence files: `License::import_license_file(content)` takes a `.kglicense` file's content (`&str`,
+  `String`, `&[u8]` or `Vec<u8>`, never a path) and verifies it offline. A key file activates its key, as
+  `activate(key)` would. An offline licence file is stored and licenses the app with no network, ever:
+  `status()` answers it with `source: Some(LicenseSource::File)` and `licensed_to`, before any key or
+  trial, and `refresh()` asks nothing for it. It answers `Ok(ImportedLicenseFile { kind, licensed_to })`
+  or an `ImportError` (`File(LicenseFileError)`, `License(LicenseError)`, `Storage`, `Busy`).
+  `remove_license_file()` drops it; `deactivate()` leaves it.
+- `LicenseConfig::revoked_license_files` lists the ids of files this build refuses: a stored one reads as
+  `Invalid` with the new reason `LicenseReason::RevokedFile`. A `match` over every `LicenseReason` has
+  one more case to handle.
+- `LicenseStatus` has `source` and `licensed_to` (none on every status not from a file), so code that
+  builds one with a struct literal must name them; `StoredState` has `license_file`, the stored offline
+  file's token.
+- `LICENSE_FILE_EXTENSION` (`.kglicense`) for an open dialog's filter, `LICENSE_FILE_MEDIA_TYPE`, and
+  the `license_file` module (`license_file_token`, `verify_license_file`, `check_license_file`,
+  `license_file_status`), which the conformance vectors' three new groups hold to the reference.
+
 ## 0.4.0
 
 - `License::purchase_url` is removed, with `Error::Random` and the `getrandom` dependency, and the SDK no

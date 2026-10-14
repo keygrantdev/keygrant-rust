@@ -3,6 +3,7 @@
 
 use std::fmt;
 
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -123,6 +124,16 @@ impl PublicKey {
         );
         b64url_encode(&Sha256::digest(members.as_bytes()))
     }
+
+    /// Whether `signature` is this key's Ed25519 signature over `message`:
+    /// 64 bytes, and verified. Bytes that are not a point on the curve verify
+    /// nothing.
+    pub(crate) fn verifies(&self, message: &[u8], signature: &[u8]) -> bool {
+        let Ok(signature) = Signature::from_slice(signature) else {
+            return false;
+        };
+        VerifyingKey::from_bytes(&self.0).is_ok_and(|key| key.verify(message, &signature).is_ok())
+    }
 }
 
 /// A product's key set, as embedded in the app: the key that signs its
@@ -179,6 +190,14 @@ impl KeySet {
     pub fn kids(&self) -> Vec<String> {
         self.0.iter().map(|(kid, _)| kid.clone()).collect()
     }
+
+    /// The key of the set whose id is `kid` (matched exactly), if any.
+    pub(crate) fn named(&self, kid: &str) -> Option<&PublicKey> {
+        self.0
+            .iter()
+            .find(|(held, _)| held == kid)
+            .map(|(_, key)| key)
+    }
 }
 
 impl From<PublicKey> for KeySet {
@@ -193,9 +212,19 @@ impl From<PublicKey> for KeySet {
 /// `<kid>` 1 to 64 characters of the base64url alphabet. Any other header
 /// names no key. It is matched as bytes, never parsed.
 pub(super) fn kid_of(header: &str) -> Option<String> {
+    named_kid(header, br#"{"alg":"EdDSA","typ":"JWT","kid":""#)
+}
+
+/// The key id a header names when it is, byte for byte, canonical base64url
+/// of `<start><kid>"}`, `<kid>` 1 to 64 characters of the base64url
+/// alphabet; none for any other header. Matched as bytes, never parsed, so
+/// no two JSON readers can disagree about what a header names. A lease's
+/// header starts `{"alg":"EdDSA","typ":"JWT","kid":"`, a licence file's
+/// `{"alg":"EdDSA","typ":"kglicense+jwt","kid":"`.
+pub(crate) fn named_kid(header: &str, start: &[u8]) -> Option<String> {
     let bytes = b64url_decode_canonical(header)?;
     let kid = bytes
-        .strip_prefix(br#"{"alg":"EdDSA","typ":"JWT","kid":""#.as_slice())?
+        .strip_prefix(start)?
         .strip_suffix(br#""}"#.as_slice())?;
     let base64url = |b: &u8| b.is_ascii_alphanumeric() || *b == b'-' || *b == b'_';
     ((1..=64).contains(&kid.len()) && kid.iter().all(base64url))

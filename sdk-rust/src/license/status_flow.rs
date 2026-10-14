@@ -19,6 +19,13 @@ impl License {
         force_online: bool,
         read_only: bool,
     ) -> LicenseStatus {
+        // A stored offline licence file that licenses this build wins, offline,
+        // with no ask and no write; one that does not answers only when no key
+        // path and no running trial does.
+        let file = self.file_status(state);
+        if let Some(licensed) = file.as_ref().filter(|f| f.state == LicenseState::Licensed) {
+            return licensed.clone();
+        }
         let now = self.engine.effective_now(state);
         // A device refusal stands only for the device it was given for: who this is.
         let device: Option<Device> = (state.refused == Some(Refusal::Device)).then(|| {
@@ -40,10 +47,19 @@ impl License {
         if let (Some(_), Some(lease)) = (key, present(&state.lease)) {
             return self.license_status(state, lease, now, force_online, read_only);
         }
-        if state.trial_start.is_some() {
-            return self.trial_status_asking(state, now, force_online, read_only);
+        // With no key to answer: a trial this device started while it runs,
+        // else a stored file that does not license this build (why is the
+        // news), else the trial that has ended, else unlicensed.
+        let trial = state
+            .trial_start
+            .is_some()
+            .then(|| self.trial_status_asking(state, now, force_online, read_only));
+        match (trial, file) {
+            (Some(trial), _) if trial.state == LicenseState::Trial => trial,
+            (_, Some(file)) => file,
+            (Some(trial), None) => trial,
+            (None, None) => LicenseStatus::new(LicenseState::Unlicensed),
         }
-        LicenseStatus::new(LicenseState::Unlicensed)
     }
 
     /// A refusal that stands for this build: answered as stored, and asked

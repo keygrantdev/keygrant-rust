@@ -89,6 +89,11 @@ pub struct LicenseConfig {
     /// that names no shorter bound of its own (default 15 s). Kept by the SDK
     /// whatever the HTTP adapter does with it.
     pub http_timeout: Duration,
+    /// The ids of licence files this build refuses (a file's `fid`): how an
+    /// app update stops an offline licence file that leaked, since nothing
+    /// else can. Matched exactly. A stored file listed here reads as
+    /// `Invalid` / `RevokedFile`; importing one is refused.
+    pub revoked_license_files: Vec<String>,
     /// Adapter overrides; any left `None` uses the default.
     pub adapters: Adapters,
     #[doc(hidden)]
@@ -104,6 +109,7 @@ impl fmt::Debug for LicenseConfig {
             .field("device_name", &self.device_name)
             .field("device_hold", &self.device_hold)
             .field("http_timeout", &self.http_timeout)
+            .field("revoked_license_files", &self.revoked_license_files)
             .field("adapters", &self.adapters)
             .finish_non_exhaustive()
     }
@@ -125,6 +131,7 @@ impl LicenseConfig {
             device_name: None,
             device_hold: true,
             http_timeout: DEFAULT_HTTP_TIMEOUT,
+            revoked_license_files: Vec::new(),
             adapters: Adapters::default(),
             timings: Timings::default(),
         }
@@ -152,6 +159,17 @@ impl LicenseConfig {
     /// The HTTP bound.
     pub fn http_timeout(mut self, timeout: Duration) -> Self {
         self.http_timeout = timeout;
+        self
+    }
+
+    /// The ids of licence files this build refuses (see
+    /// [`revoked_license_files`](Self::revoked_license_files)).
+    pub fn revoked_license_files<I, S>(mut self, ids: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.revoked_license_files = ids.into_iter().map(Into::into).collect();
         self
     }
 

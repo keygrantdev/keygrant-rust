@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 use super::{each, int, text, vectors};
 
 /// A vector's keys, as a key set.
-fn key_set(keys: &Value) -> KeySet {
+pub(super) fn key_set(keys: &Value) -> KeySet {
     let keys = keys
         .as_array()
         .expect("keys")

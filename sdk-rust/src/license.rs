@@ -5,7 +5,10 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
 mod activation;
+mod files;
 mod status_flow;
+
+pub use files::ImportedLicenseFile;
 
 use crate::config::LicenseConfig;
 use crate::engine::Engine;
@@ -187,8 +190,9 @@ impl License {
 
     /// Whether the licence this device holds grants the entitlement `code`: a
     /// flag that is on, a number that is not zero, or a text that is not
-    /// empty ([`grants`](crate::grants)). Offline, from the stored lease only:
-    /// the entitlements of the status `status()` gives from what is stored,
+    /// empty ([`grants`](crate::grants)). Offline, from the stored lease or
+    /// stored offline licence file only: the entitlements of the status
+    /// `status()` gives from what is stored,
     /// with no ask and no write, so a licence that does not license this
     /// build, and none at all, grant nothing. A running trial grants what its
     /// trial lease does. A state that cannot be read grants nothing just now.

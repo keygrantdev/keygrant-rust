@@ -250,6 +250,13 @@ state_fields! {
     /// When (guarded device clock, ms) a running trial last reported its
     /// launch: at most once a day, a trial answer (`trialAt`) counting as one.
     trial_reported_at: i64 = "trialReportedAt";
+    /// The stored offline licence file's token, as
+    /// [`License::import_license_file`](crate::License::import_license_file)
+    /// stored it. Verified again on every status, so an edit to it licenses
+    /// nothing. Never a key file: importing one activates its key. A stored
+    /// value that is not text is read as none, as every field of the wrong
+    /// type is.
+    license_file: String = "licenseFile";
     /// The default storage's revision of this state, one more on every save.
     rev: i64 = "rev";
 }

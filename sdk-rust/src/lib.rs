@@ -44,6 +44,7 @@ mod http;
 pub mod launch;
 pub mod lease;
 mod license;
+pub mod license_file;
 pub mod machine_id;
 #[doc(hidden)]
 pub mod offline;
@@ -67,20 +68,26 @@ pub use adapters::{
 #[doc(hidden)]
 pub use config::Timings;
 pub use config::{LicenseConfig, LOCK_GRACE};
-pub use error::{ActivateError, ActivateResult, ConfigError, Error, MissingEntitlement};
+pub use error::{
+    ActivateError, ActivateResult, ConfigError, Error, ImportError, MissingEntitlement,
+};
 pub use fingerprint::{
     hash_fingerprint, host_fingerprint, host_name, host_names, hostname_fingerprint, identity_of,
     machine_fingerprint, DefaultFingerprinter, HostNames, UNKNOWN_HOST,
 };
 pub use http::{UreqHttp, DEFAULT_HTTP_TIMEOUT};
 pub use lease::{grants, Entitlement, KeySet};
-pub use license::License;
+pub use license::{ImportedLicenseFile, License};
+pub use license_file::{
+    LicenseFileError, LicenseFileKind, LICENSE_FILE_EXTENSION, LICENSE_FILE_MEDIA_TYPE,
+};
 #[cfg(windows)]
 pub use registry::WindowsRegistryStash;
 #[doc(hidden)]
 pub use state::Patch;
 pub use state::StoredState;
 pub use status::{
-    DeactivateResult, DeviceKind, LicenseError, LicenseReason, LicenseState, LicenseStatus, Refusal,
+    DeactivateResult, DeviceKind, LicenseError, LicenseReason, LicenseSource, LicenseState,
+    LicenseStatus, LicensedTo, Refusal,
 };
 pub use storage::{default_storage_path, FileStorage};

@@ -5,6 +5,7 @@ use std::io;
 
 use serde::{Serialize, Serializer};
 
+use crate::license_file::LicenseFileError;
 use crate::status::LicenseError;
 
 /// Why `activate()` did not activate.
@@ -124,6 +125,76 @@ impl std::error::Error for Error {
 }
 
 impl Serialize for Error {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.code())
+    }
+}
+
+/// Why [`License::import_license_file`](crate::License::import_license_file)
+/// took no licence file.
+///
+/// Serialises as its word (`"malformed"`, ..., `"limit"`, `"storage"`,
+/// `"busy"`), so a Tauri command can return it to the front end as is.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum ImportError {
+    /// The file was refused, and nothing was stored (see [`LicenseFileError`]).
+    File(LicenseFileError),
+    /// A key file's key did not activate: what `activate()` answers.
+    License(LicenseError),
+    /// The licence state could not be read or saved: try again.
+    Storage(io::Error),
+    /// A previous licence call on this `License` has not finished: try again.
+    Busy,
+}
+
+impl ImportError {
+    /// The error's word: a [`LicenseFileError`]'s, a [`LicenseError`]'s,
+    /// `storage` or `busy`.
+    pub fn code(&self) -> &'static str {
+        match self {
+            ImportError::File(error) => error.as_str(),
+            ImportError::License(error) => error.as_str(),
+            ImportError::Storage(_) => "storage",
+            ImportError::Busy => "busy",
+        }
+    }
+}
+
+impl From<ActivateError> for ImportError {
+    fn from(error: ActivateError) -> Self {
+        match error {
+            ActivateError::License(error) => ImportError::License(error),
+            ActivateError::Storage(error) => ImportError::Storage(error),
+        }
+    }
+}
+
+impl fmt::Display for ImportError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ImportError::File(error) => write!(f, "the licence file was not taken: {error}"),
+            ImportError::License(error) => write!(f, "activation failed: {error}"),
+            ImportError::Storage(error) => {
+                write!(f, "the licence state could not be read or saved: {error}")
+            }
+            ImportError::Busy => f.write_str("a previous licence call has not finished; try again"),
+        }
+    }
+}
+
+impl std::error::Error for ImportError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            ImportError::File(error) => Some(error),
+            ImportError::License(error) => Some(error),
+            ImportError::Storage(error) => Some(error),
+            ImportError::Busy => None,
+        }
+    }
+}
+
+impl Serialize for ImportError {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.serialize_str(self.code())
     }

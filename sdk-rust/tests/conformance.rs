@@ -124,8 +124,13 @@ mod later;
 #[path = "conformance/keys.rs"]
 mod keys;
 
+/// The licence-file groups, after the key-set groups, answered in
+/// `conformance/files.rs`.
+#[path = "conformance/files.rs"]
+mod files;
+
 /// Every group this harness answers, in the file's order.
-const GROUPS: [&str; 40] = [
+const GROUPS: [&str; 43] = [
     "leases",
     "trials",
     "fingerprintClaims",
@@ -166,6 +171,9 @@ const GROUPS: [&str; 40] = [
     "keyIds",
     "keySets",
     "grants",
+    "licenseFileContainers",
+    "licenseFiles",
+    "filesAsLeases",
 ];
 
 fn group<'a>(vectors: &'a Value, name: &str) -> &'a Vec<Value> {
@@ -323,6 +331,7 @@ fn constants_are_the_references() {
         "UPDATE_ATTEMPTS": UPDATE_ATTEMPTS,
         "UNKNOWN_HOST": UNKNOWN_HOST,
         "TRIAL_REPORT_MS": TRIAL_REPORT_MS,
+        "MAX_LICENSE_FILE_BYTES": keygrant::license_file::MAX_LICENSE_FILE_BYTES,
     });
     assert_eq!(*c, expected);
 }

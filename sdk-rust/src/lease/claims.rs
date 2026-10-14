@@ -78,7 +78,7 @@ impl Entitlement {
     }
 
     /// The value as JSON, as the reference writes it: a whole number without a fraction.
-    fn to_json(&self) -> Value {
+    pub(crate) fn to_json(&self) -> Value {
         match self {
             Entitlement::Bool(flag) => Value::from(*flag),
             Entitlement::Number(number) => js_number(*number),
@@ -133,7 +133,7 @@ pub struct LeaseClaims {
     pub model: LicenseModel,
     /// The licence's device limit.
     pub lim: i64,
-    /// The highest major it covers ([`OPEN_MAJOR`] for no upper bound); 0 when absent.
+    /// The highest major it covers ([`OPEN_MAJOR`](super::OPEN_MAJOR) for no upper bound); 0 when absent.
     pub major: i64,
     /// The lowest major it covers, when above 1.
     pub min_major: Option<i64>,
@@ -276,7 +276,7 @@ pub(super) fn parse_claims(value: &Value) -> Option<LeaseClaims> {
 }
 
 /// A required non-empty string.
-fn string(map: &Map<String, Value>, name: &str) -> Option<String> {
+pub(crate) fn string(map: &Map<String, Value>, name: &str) -> Option<String> {
     map.get(name)?
         .as_str()
         .filter(|s| !s.is_empty())
@@ -285,7 +285,7 @@ fn string(map: &Map<String, Value>, name: &str) -> Option<String> {
 
 /// An optional claim: `Some(None)` when absent, `None` (bad claims) when
 /// present and not what `read` accepts (`null` included).
-fn optional<T>(
+pub(crate) fn optional<T>(
     map: &Map<String, Value>,
     name: &str,
     read: impl Fn(&Value) -> Option<T>,
