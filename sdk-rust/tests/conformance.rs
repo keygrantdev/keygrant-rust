@@ -129,8 +129,13 @@ mod keys;
 #[path = "conformance/files.rs"]
 mod files;
 
+/// The user-lock groups, after the licence-file groups, answered in
+/// `conformance/user_lock.rs`.
+#[path = "conformance/user_lock.rs"]
+mod user_lock;
+
 /// Every group this harness answers, in the file's order.
-const GROUPS: [&str; 43] = [
+const GROUPS: [&str; 45] = [
     "leases",
     "trials",
     "fingerprintClaims",
@@ -174,6 +179,8 @@ const GROUPS: [&str; 43] = [
     "licenseFileContainers",
     "licenseFiles",
     "filesAsLeases",
+    "typedFor",
+    "userLockErrors",
 ];
 
 fn group<'a>(vectors: &'a Value, name: &str) -> &'a Vec<Value> {

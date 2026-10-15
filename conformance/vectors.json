@@ -21,7 +21,10 @@
     "grants.expect: whether ent, read as a lease's ent is read, grants code: a flag that is true, a number that is not 0, a text that is not empty; the code matched exactly.",
     "licenseFileContainers.bytes is a file's content as canonical base64url (no padding); expect is the token it holds (licenseFileToken), or null when it is no licence file's container.",
     "licenseFiles: token verified against the key set keys (verifyLicenseFile; keys read as keySets.keys are), judged for product, the build's major and the denylist revoked (checkLicenseFile: expect is {ok, kind, test} or {ok, reason}); status is the status it gives when stored (licenseFileStatus). verify.claims are the claims as parsed: an offline file's ent read leniently, a key file's versions and entitlements not read.",
-    "filesAsLeases: a licence file given where a lease goes, verified against publicJwk and judged as leases judges a lease (holder: this licence's key and activation, on a run that cannot tell its device), and as a trial lease for the same device (trial: trialLeaseValid)."
+    "filesAsLeases: a licence file given where a lease goes, verified against publicJwk and judged as leases judges a lease (holder: this licence's key and activation, on a run that cannot tell its device), and as a trial lease for the same device (trial: trialLeaseValid).",
+    "typedFor: email and code are what a person typed for a user-locked key, null when they gave none. expect is {send: {email?, code?}}, each member only when there was one to send, or {refused: error}, the error activate answers at once, before anything is asked of the server.",
+    "The address is trimmed (as a key is: the whitespace a paste carries, a byte-order mark included) and sent as typed otherwise; a blank is none. One longer than 254 UTF-16 units after the trim (an astral character is two) is refused user-email-mismatch. The code has its ends trimmed and then its spaces (U+0020) dropped, and a blank is none; what remains must be exactly six ASCII digits (0 to 9), else it is refused user-code-invalid. The address is judged before the code.",
+    "userLockErrors: error is the error word of a refused activation, as the server writes it (null or a number for a body that has none); expect is the error activate answers, every word of a user lock as itself and any other word as network."
   ],
   "publicJwk": {
     "kty": "OKP",
@@ -17213,6 +17216,476 @@
         "reason": "tampered"
       },
       "trial": false
+    }
+  ],
+  "typedFor": [
+    {
+      "email": null,
+      "code": null,
+      "expect": {
+        "send": {}
+      }
+    },
+    {
+      "email": "Mara@Studio.example",
+      "code": null,
+      "expect": {
+        "send": {
+          "email": "Mara@Studio.example"
+        }
+      }
+    },
+    {
+      "email": "mara@studio.example",
+      "code": null,
+      "expect": {
+        "send": {
+          "email": "mara@studio.example"
+        }
+      }
+    },
+    {
+      "email": "  Mara@Studio.example\n",
+      "code": null,
+      "expect": {
+        "send": {
+          "email": "Mara@Studio.example"
+        }
+      }
+    },
+    {
+      "email": "\tMara@Studio.example\r\n",
+      "code": null,
+      "expect": {
+        "send": {
+          "email": "Mara@Studio.example"
+        }
+      }
+    },
+    {
+      "email": "﻿Mara@Studio.example",
+      "code": null,
+      "expect": {
+        "send": {
+          "email": "Mara@Studio.example"
+        }
+      }
+    },
+    {
+      "email": "",
+      "code": null,
+      "expect": {
+        "send": {}
+      }
+    },
+    {
+      "email": "   ",
+      "code": null,
+      "expect": {
+        "send": {}
+      }
+    },
+    {
+      "email": "\n",
+      "code": null,
+      "expect": {
+        "send": {}
+      }
+    },
+    {
+      "email": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@studio.example",
+      "code": null,
+      "expect": {
+        "send": {
+          "email": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@studio.example"
+        }
+      }
+    },
+    {
+      "email": " aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@studio.example ",
+      "code": null,
+      "expect": {
+        "send": {
+          "email": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@studio.example"
+        }
+      }
+    },
+    {
+      "email": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@studio.example",
+      "code": null,
+      "expect": {
+        "refused": "user-email-mismatch"
+      }
+    },
+    {
+      "email": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "code": null,
+      "expect": {
+        "send": {
+          "email": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+        }
+      }
+    },
+    {
+      "email": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+      "code": null,
+      "expect": {
+        "refused": "user-email-mismatch"
+      }
+    },
+    {
+      "email": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa😀",
+      "code": null,
+      "expect": {
+        "send": {
+          "email": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa😀"
+        }
+      }
+    },
+    {
+      "email": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa😀",
+      "code": null,
+      "expect": {
+        "refused": "user-email-mismatch"
+      }
+    },
+    {
+      "email": " mara@studio.example ",
+      "code": null,
+      "expect": {
+        "send": {
+          "email": "mara@studio.example"
+        }
+      }
+    },
+    {
+      "email": "　mara@studio.example ",
+      "code": null,
+      "expect": {
+        "send": {
+          "email": "mara@studio.example"
+        }
+      }
+    },
+    {
+      "email": "  　",
+      "code": null,
+      "expect": {
+        "send": {}
+      }
+    },
+    {
+      "email": null,
+      "code": "123456",
+      "expect": {
+        "send": {
+          "code": "123456"
+        }
+      }
+    },
+    {
+      "email": null,
+      "code": "000042",
+      "expect": {
+        "send": {
+          "code": "000042"
+        }
+      }
+    },
+    {
+      "email": null,
+      "code": " 123456\n",
+      "expect": {
+        "send": {
+          "code": "123456"
+        }
+      }
+    },
+    {
+      "email": null,
+      "code": "123 456",
+      "expect": {
+        "send": {
+          "code": "123456"
+        }
+      }
+    },
+    {
+      "email": null,
+      "code": "1 2 3 4 5 6",
+      "expect": {
+        "send": {
+          "code": "123456"
+        }
+      }
+    },
+    {
+      "email": null,
+      "code": " 123 456 ",
+      "expect": {
+        "send": {
+          "code": "123456"
+        }
+      }
+    },
+    {
+      "email": null,
+      "code": "",
+      "expect": {
+        "send": {}
+      }
+    },
+    {
+      "email": null,
+      "code": "  ",
+      "expect": {
+        "send": {}
+      }
+    },
+    {
+      "email": null,
+      "code": " 123456 ",
+      "expect": {
+        "send": {
+          "code": "123456"
+        }
+      }
+    },
+    {
+      "email": null,
+      "code": "　123 456 ",
+      "expect": {
+        "send": {
+          "code": "123456"
+        }
+      }
+    },
+    {
+      "email": null,
+      "code": "123 456",
+      "expect": {
+        "refused": "user-code-invalid"
+      }
+    },
+    {
+      "email": null,
+      "code": "123 456",
+      "expect": {
+        "refused": "user-code-invalid"
+      }
+    },
+    {
+      "email": null,
+      "code": "12345",
+      "expect": {
+        "refused": "user-code-invalid"
+      }
+    },
+    {
+      "email": null,
+      "code": "1234567",
+      "expect": {
+        "refused": "user-code-invalid"
+      }
+    },
+    {
+      "email": null,
+      "code": "12345a",
+      "expect": {
+        "refused": "user-code-invalid"
+      }
+    },
+    {
+      "email": null,
+      "code": "abcdef",
+      "expect": {
+        "refused": "user-code-invalid"
+      }
+    },
+    {
+      "email": null,
+      "code": "123-456",
+      "expect": {
+        "refused": "user-code-invalid"
+      }
+    },
+    {
+      "email": null,
+      "code": "123\t456",
+      "expect": {
+        "refused": "user-code-invalid"
+      }
+    },
+    {
+      "email": null,
+      "code": "123\n456",
+      "expect": {
+        "refused": "user-code-invalid"
+      }
+    },
+    {
+      "email": null,
+      "code": "１２３４５６",
+      "expect": {
+        "refused": "user-code-invalid"
+      }
+    },
+    {
+      "email": null,
+      "code": "١٢٣٤٥٦",
+      "expect": {
+        "refused": "user-code-invalid"
+      }
+    },
+    {
+      "email": null,
+      "code": "+12345",
+      "expect": {
+        "refused": "user-code-invalid"
+      }
+    },
+    {
+      "email": null,
+      "code": "1e5555",
+      "expect": {
+        "refused": "user-code-invalid"
+      }
+    },
+    {
+      "email": null,
+      "code": "0x1234",
+      "expect": {
+        "refused": "user-code-invalid"
+      }
+    },
+    {
+      "email": "Mara@Studio.example",
+      "code": "123456",
+      "expect": {
+        "send": {
+          "email": "Mara@Studio.example",
+          "code": "123456"
+        }
+      }
+    },
+    {
+      "email": "  mara@studio.example ",
+      "code": " 123 456 ",
+      "expect": {
+        "send": {
+          "email": "mara@studio.example",
+          "code": "123456"
+        }
+      }
+    },
+    {
+      "email": "Mara@Studio.example",
+      "code": "12345",
+      "expect": {
+        "refused": "user-code-invalid"
+      }
+    },
+    {
+      "email": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@studio.example",
+      "code": "123456",
+      "expect": {
+        "refused": "user-email-mismatch"
+      }
+    },
+    {
+      "email": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@studio.example",
+      "code": "nope",
+      "expect": {
+        "refused": "user-email-mismatch"
+      }
+    },
+    {
+      "email": "",
+      "code": "123456",
+      "expect": {
+        "send": {
+          "code": "123456"
+        }
+      }
+    },
+    {
+      "email": "Mara@Studio.example",
+      "code": "",
+      "expect": {
+        "send": {
+          "email": "Mara@Studio.example"
+        }
+      }
+    }
+  ],
+  "userLockErrors": [
+    {
+      "error": "user-email-required",
+      "expect": "user-email-required"
+    },
+    {
+      "error": "user-email-mismatch",
+      "expect": "user-email-mismatch"
+    },
+    {
+      "error": "user-code-required",
+      "expect": "user-code-required"
+    },
+    {
+      "error": "user-code-invalid",
+      "expect": "user-code-invalid"
+    },
+    {
+      "error": "too-many-codes",
+      "expect": "too-many-codes"
+    },
+    {
+      "error": "too-many-attempts",
+      "expect": "too-many-attempts"
+    },
+    {
+      "error": "try-again",
+      "expect": "try-again"
+    },
+    {
+      "error": "limit",
+      "expect": "limit"
+    },
+    {
+      "error": "rate-limited",
+      "expect": "network"
+    },
+    {
+      "error": "unavailable",
+      "expect": "network"
+    },
+    {
+      "error": "too-many-requests",
+      "expect": "network"
+    },
+    {
+      "error": "user-code",
+      "expect": "network"
+    },
+    {
+      "error": "User-Code-Invalid",
+      "expect": "network"
+    },
+    {
+      "error": "try_again",
+      "expect": "network"
+    },
+    {
+      "error": "something-new",
+      "expect": "network"
+    },
+    {
+      "error": null,
+      "expect": "network"
+    },
+    {
+      "error": 42,
+      "expect": "network"
     }
   ]
 }

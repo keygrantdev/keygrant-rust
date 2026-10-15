@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::License;
+use super::{ActivateOptions, License};
 use crate::error::{Error, ImportError};
 use crate::license_file::{
     license_file_status, license_file_token, licensed_to_of, LicenseFileCheck, LicenseFileError,
@@ -47,12 +47,26 @@ impl License {
         &self,
         content: impl AsRef<[u8]>,
     ) -> Result<ImportedLicenseFile, ImportError> {
+        self.import_license_file_with(content, &ActivateOptions::default())
+    }
+
+    /// [`import_license_file`](License::import_license_file) with what a
+    /// person typed for a user-locked key ([`ActivateOptions`]), passed on to
+    /// a key file's activation exactly as
+    /// [`activate_with`](License::activate_with) takes it. An offline file
+    /// ignores it, and a file that is no licence file is refused before any
+    /// key is asked for.
+    pub fn import_license_file_with(
+        &self,
+        content: impl AsRef<[u8]>,
+        options: &ActivateOptions,
+    ) -> Result<ImportedLicenseFile, ImportError> {
         let content = content.as_ref();
         self.engine.serial(|read_only| {
             if read_only {
                 return Err(ImportError::Busy);
             }
-            self.import_now(content)
+            self.import_now(content, options)
         })
     }
 
@@ -70,7 +84,11 @@ impl License {
         })
     }
 
-    fn import_now(&self, content: &[u8]) -> Result<ImportedLicenseFile, ImportError> {
+    fn import_now(
+        &self,
+        content: &[u8],
+        options: &ActivateOptions,
+    ) -> Result<ImportedLicenseFile, ImportError> {
         let token =
             license_file_token(content).ok_or(ImportError::File(LicenseFileError::Malformed))?;
         let claims = match self.engine.check_file(&token) {
@@ -82,7 +100,7 @@ impl License {
             licensed_to: licensed_to_of(&claims),
         };
         if taken.kind == LicenseFileKind::Key {
-            self.activate_now(&claims.sub)?;
+            self.activate_now(&claims.sub, options)?;
         } else {
             self.save_license_file(Some(token))
                 .map_err(ImportError::Storage)?;

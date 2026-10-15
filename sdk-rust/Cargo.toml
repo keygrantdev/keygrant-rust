@@ -1,6 +1,6 @@
 [package]
 name = "keygrant"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 rust-version = "1.86"
 description = "KeyGrant licensing for Tauri and native Rust desktop apps: signed leases verified offline, failing in favour of the paying customer."

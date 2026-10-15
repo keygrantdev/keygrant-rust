@@ -2,7 +2,7 @@
 
 use serde_json::{Map, Value};
 
-use super::License;
+use super::{ActivateOptions, License};
 use crate::device::activation_identity;
 use crate::engine::{GuardSave, Holder};
 use crate::error::{ActivateError, ActivateResult, Error};
@@ -12,13 +12,17 @@ use crate::offline::{
 };
 use crate::state::{present, Patch, StoredState};
 use crate::status::{DeactivateResult, DeviceKind, LicenseError, Refusal};
-use crate::wire::{entered_key, error_of, map_server_error, parse_lease_body};
+use crate::wire::{entered_key, error_of, map_server_error, parse_lease_body, typed_for, Typed};
 
 impl License {
-    pub(super) fn activate_now(&self, key: &str) -> ActivateResult {
+    pub(super) fn activate_now(&self, key: &str, options: &ActivateOptions) -> ActivateResult {
         let Some(entered) = entered_key(key) else {
             return Err(LicenseError::InvalidKey.into());
         };
+        // What a person typed for a user-locked key: one that can be no
+        // address, or no code, is refused here, before anything is asked of
+        // the server or its wrong tries are spent.
+        let typed = typed_for(options.email.as_deref(), options.code.as_deref())?;
         // Install memory protects the seat this install holds: re-activating
         // that key keeps to it; a first activation, or another key's, starts afresh.
         let stored = self.engine.load(false).map_err(ActivateError::Storage)?;
@@ -40,7 +44,7 @@ impl License {
         // Stamped with when it was asked for: an older ask's answer, from
         // another process, is not saved over it.
         let asked_at = self.engine.effective_now(&stored);
-        let body = self.activate_body(&entered, fingerprint, kind);
+        let body = self.activate_body(&entered, fingerprint, kind, &typed);
         let Ok(response) = self.engine.post("activate", body, None) else {
             return Err(LicenseError::Network.into());
         };
@@ -87,12 +91,14 @@ impl License {
     }
 
     /// An activation's body: the key, the fingerprint it is made under (and
-    /// its kind), the device name when the app gave one, and the major.
+    /// its kind), the device name when the app gave one, the major, and what
+    /// a person typed for a user-locked key, each only when there is one.
     pub(super) fn activate_body(
         &self,
         key: &str,
         fingerprint: String,
         kind: Option<DeviceKind>,
+        typed: &Typed,
     ) -> Value {
         let mut body = Map::new();
         body.insert("key".into(), Value::from(key));
@@ -105,6 +111,12 @@ impl License {
         }
         body.insert("major".into(), Value::from(self.engine.major));
         body.insert("kids".into(), self.engine.kids());
+        if let Some(email) = &typed.email {
+            body.insert("email".into(), Value::from(email.clone()));
+        }
+        if let Some(code) = &typed.code {
+            body.insert("code".into(), Value::from(code.clone()));
+        }
         Value::Object(body)
     }
 

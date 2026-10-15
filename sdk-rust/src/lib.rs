@@ -77,7 +77,7 @@ pub use fingerprint::{
 };
 pub use http::{UreqHttp, DEFAULT_HTTP_TIMEOUT};
 pub use lease::{grants, Entitlement, KeySet};
-pub use license::{ImportedLicenseFile, License};
+pub use license::{ActivateOptions, ImportedLicenseFile, License};
 pub use license_file::{
     LicenseFileError, LicenseFileKind, LICENSE_FILE_EXTENSION, LICENSE_FILE_MEDIA_TYPE,
 };

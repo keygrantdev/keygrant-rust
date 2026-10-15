@@ -28,7 +28,7 @@ The full guide is at https://keygrant.dev/docs.
 
 ```toml
 [dependencies]
-keygrant = "0.5"
+keygrant = "0.6"
 ```
 
 or `cargo add keygrant`.
@@ -143,7 +143,8 @@ async fn activate(license: tauri::State<'_, Arc<License>>, key: String) -> Resul
         .await
         .map_err(|e| e.to_string())?
         // "invalid-key", "limit", "revoked", "upgrade", "outdated", "network",
-        // "invalid-lease" or "storage": the same words as the Electron SDK.
+        // "invalid-lease", the seven words of a user-locked key (see below)
+        // or "storage": the same words as the Electron SDK.
         .map_err(|e| e.code().to_owned())
 }
 
@@ -303,6 +304,55 @@ signed it and never expires, so a key that has signed one stays in the
 product's key set, and in `public_jwk`, after it stops signing leases. A build
 without it reads such a file as `Invalid` / `UnknownKey`.
 
+## User-locked keys
+
+A licence model can let only the person a key was sold to activate a NEW
+device on it: the activation names the address on the key and, for a key that
+mails a code to that address, the code too. Only a new device is ever asked;
+`status()`, `refresh()`, a renewal, a seat the key already holds and everything
+offline are as they were, so an app that is activated keeps running through a
+KeyGrant or mail outage.
+
+`activate_with` carries what the person typed (`ActivateOptions`; each member
+is optional, and neither is ever stored):
+
+```rust
+use keygrant::{ActivateOptions, LicenseError};
+
+let options = ActivateOptions::new().email(&entered_email).code(&entered_code);
+if let Err(error) = license.activate_with(&entered_key, &options) {
+    match error.license_error() {
+        // Ask for the address, then activate again with it.
+        Some(LicenseError::UserEmailRequired | LicenseError::UserEmailMismatch) => {}
+        // A code was just mailed to the address: ask for it.
+        Some(LicenseError::UserCodeRequired | LicenseError::UserCodeInvalid) => {}
+        Some(LicenseError::TooManyCodes | LicenseError::TooManyAttempts) => {}
+        Some(LicenseError::TryAgain) => {}
+        _ => {}
+    }
+}
+```
+
+| Error (its word) | Means | The app |
+|---|---|---|
+| `UserEmailRequired` (`user-email-required`) | the key is locked and no address came | ask for the address |
+| `UserEmailMismatch` (`user-email-mismatch`) | not the key's address (nothing is said of the real one) | ask again |
+| `UserCodeRequired` (`user-code-required`) | the address was right and a code was just mailed to it | ask for the code |
+| `UserCodeInvalid` (`user-code-invalid`) | the code is wrong, expired (10 minutes) or used, or the key's codes are void for the hour after five wrong ones | ask again, or activate with the address alone for a new code |
+| `TooManyCodes` (`too-many-codes`) | three codes were mailed for the key this hour | wait, or use the code sent |
+| `TooManyAttempts` (`too-many-attempts`) | ten wrong addresses this hour, or the key's codes void | try again later |
+| `TryAgain` (`try-again`) | the code could not be mailed: nothing was activated | retry; the one error here that is nobody's mistake |
+
+The address is trimmed (it is compared without regard to case) and a blank is
+none. The code has its ends trimmed and its spaces dropped (`123 456` is
+`123456`), and must be exactly six ASCII digits. An address longer than 254
+UTF-16 units, or a code that is not six digits, answers `UserEmailMismatch` or
+`UserCodeInvalid` at once, for any key, asking the server nothing and so
+costing the key none of its wrong tries; the key is judged first, then the
+address, then the code. A key that is not locked ignores both once they reach
+the server. `import_license_file_with(content, &options)` passes them on to a
+key file's key. `deactivate()`, `refresh()` and `start_trial()` take neither.
+
 ## Buying from the app
 
 Give a customer who holds no key a Buy button that opens your Stripe Payment
@@ -327,9 +377,11 @@ upgrades.
 | `status(force_online)` | The licence's status. Offline-first; asks the server only when it should (below). Never fails: storage that cannot be read just now is `Unknown`. |
 | `refresh()` | `status(true)`: asks the server at once, whatever the waits say. Call it when the customer says they have paid. |
 | `activate(key)` | Activates the key on this device. The key is trimmed and upper-cased first. `Err(ActivateError::License(_))` or `Err(ActivateError::Storage(_))`. |
+| `activate_with(key, &options)` | `activate`, with the address and code a person typed for a user-locked key (`ActivateOptions`). See [User-locked keys](#user-locked-keys). |
 | `deactivate()` | Releases the seat and drops the local licence, keeping the trial evidence. `Ok(DeactivateResult { released })`: `released` is true when KeyGrant answered the release with a 200, or when there was no activation to release; false when it could not be asked or answered anything else (a 5xx, a 429, a proxy's page), so the seat may still be held and the app should say so. The local licence is dropped either way. An activation that is another device's (a state file copied or restored from another PC: a device refusal that stands for this device, or a lease, expired or not, held to a machine id this device can tell is not its own) is never released, as releasing it would lock that PC out: it is dropped here, and the answer is `released: true`. `Err(Error::Busy)` behind a call that has not finished, and `Err(Error::Storage(_))` when the state cannot be read, release nothing. `Err(Error::Storage(_))` when the state cannot be saved comes after the release was asked for: the seat may already be free while the device still holds the key, so try again (the release is idempotent: the retry answers `released: true` and drops the key). |
 | `start_trial()` | Starts (or re-syncs) this device's trial. Never fails; the server's trial is answered even when it cannot be saved. An answer whose trial lease this build cannot verify (signed with a key the product rotated to ahead of this build) never replaces a stored trial lease it can: the stored one is kept, so the running trial does not end. An answer with no lease (the trial is over) is taken as it is. |
 | `import_license_file(content)` | Takes a licence file's content, verified offline: an offline file is stored and licenses the app with no network; a key file's key is activated as `activate` would. See [Licence files](#licence-files-drag-and-drop). |
+| `import_license_file_with(content, &options)` | `import_license_file`, passing `ActivateOptions` on to a key file's activation. |
 | `remove_license_file()` | Drops the stored offline licence file; a key the device holds keeps working. `Err(Error::Busy)` or `Err(Error::Storage(_))`. |
 | `upgrade_url(link)` | The payment link with this device's **activation id** (never the key) as `client_reference_id`, so an upgrade checkout extends the key the customer holds. `Ok(None)` without an activation. |
 
@@ -634,6 +686,12 @@ the reasons below.
   `ImportError::Storage` where the reference rejects, and its refusals as
   `ImportError::File` and `ImportError::License` where the reference resolves
   `{ ok: false, error }`.
+- Rust has no optional arguments: where the reference takes
+  `activate(key, { email, code })` and `importLicenseFile(content, { email, code })`,
+  this crate keeps `activate(key)` and `import_license_file(content)` and adds
+  `activate_with(key, &options)` and `import_license_file_with(content, &options)`,
+  with `ActivateOptions` for the object. The reference also reads a code kept
+  as a number; here a code is text, as in every typed port.
 - A running trial's launch report is sent on a thread of its own (the
   reference sends it as a promise it never awaits). The thread shares the
   `License`'s adapters, all `Send + Sync`; a test waits for it through a

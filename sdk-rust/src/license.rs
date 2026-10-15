@@ -6,9 +6,11 @@ use std::thread::JoinHandle;
 
 mod activation;
 mod files;
+mod options;
 mod status_flow;
 
 pub use files::ImportedLicenseFile;
+pub use options::ActivateOptions;
 
 use crate::config::LicenseConfig;
 use crate::engine::Engine;
@@ -107,12 +109,29 @@ impl License {
     /// sent and stored. Behind a call that has not finished, nothing may be
     /// written: the activation answers `Network`, to retry. A state that
     /// cannot be read or saved is [`ActivateError::Storage`].
+    ///
+    /// A user-locked key asks a new device who it is, and answers
+    /// [`LicenseError::UserEmailRequired`] here:
+    /// [`activate_with`](License::activate_with) carries the address and the code.
     pub fn activate(&self, key: &str) -> ActivateResult {
+        self.activate_with(key, &ActivateOptions::default())
+    }
+
+    /// [`activate`](License::activate) with what a person typed for a
+    /// user-locked key ([`ActivateOptions`]): its address and, for a key that
+    /// mails a code to it, the code. Nothing is stored. The key is judged
+    /// first, then the address, then the code: an address longer than any
+    /// answers [`LicenseError::UserEmailMismatch`], and a code that is not
+    /// six digits [`LicenseError::UserCodeInvalid`], at once and for any key,
+    /// asking nothing (so costing the key none of its wrong tries). Only an
+    /// activation takes them: `refresh()`, `deactivate()` and `start_trial()`
+    /// never ask a device who it is.
+    pub fn activate_with(&self, key: &str, options: &ActivateOptions) -> ActivateResult {
         self.engine.serial(|read_only| {
             if read_only {
                 return Err(ActivateError::License(LicenseError::Network));
             }
-            self.activate_now(key)
+            self.activate_now(key, options)
         })
     }
 

@@ -17,6 +17,14 @@ pub fn map_server_error(error: Option<&str>) -> LicenseError {
         Some("revoked") | Some("expired") => LicenseError::Revoked,
         Some("upgrade-required") => LicenseError::Upgrade,
         Some("update-required") => LicenseError::Outdated,
+        // A user-locked key's new device: each word is its own error.
+        Some("user-email-required") => LicenseError::UserEmailRequired,
+        Some("user-email-mismatch") => LicenseError::UserEmailMismatch,
+        Some("user-code-required") => LicenseError::UserCodeRequired,
+        Some("user-code-invalid") => LicenseError::UserCodeInvalid,
+        Some("too-many-codes") => LicenseError::TooManyCodes,
+        Some("too-many-attempts") => LicenseError::TooManyAttempts,
+        Some("try-again") => LicenseError::TryAgain,
         _ => LicenseError::Network,
     }
 }
@@ -49,6 +57,66 @@ pub const STATUS_CHECK_TIMEOUT: Duration = Duration::from_millis(5_000);
 pub fn entered_key(key: &str) -> Option<String> {
     let entered = js_trim(key).to_uppercase();
     (!entered.is_empty() && utf16_len(&entered) <= MAX_KEY).then_some(entered)
+}
+
+/// The longest address the endpoint takes; a longer one is no key's address.
+pub const MAX_EMAIL: usize = 254;
+/// How many digits a code has.
+const CODE_DIGITS: usize = 6;
+
+/// What an activation sends for what a person typed for a user-locked key:
+/// the address and the code, each only when there is one.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Typed {
+    /// The address, trimmed, as typed otherwise.
+    pub email: Option<String>,
+    /// The code, its spaces dropped: exactly six ASCII digits.
+    pub code: Option<String>,
+}
+
+/// What an activation sends for the address and code a person typed, or the
+/// error that refuses them before anything is sent (an address longer than
+/// any is `UserEmailMismatch`, a code that is not six digits
+/// `UserCodeInvalid`; the address is judged first).
+pub fn typed_for(email: Option<&str>, code: Option<&str>) -> Result<Typed, LicenseError> {
+    let email = entered_email(email)?;
+    let code = entered_code(code)?;
+    Ok(Typed { email, code })
+}
+
+/// The address a person entered, trimmed as a key is: none when it is blank
+/// (and it is not sent). The server compares it without regard to case, so
+/// it is sent as typed. One longer than [`MAX_EMAIL`] UTF-16 units after the
+/// trim can match no key's address.
+fn entered_email(email: Option<&str>) -> Result<Option<String>, LicenseError> {
+    let entered = js_trim(email.unwrap_or_default());
+    if entered.is_empty() {
+        return Ok(None);
+    }
+    if utf16_len(entered) <= MAX_EMAIL {
+        Ok(Some(entered.to_owned()))
+    } else {
+        Err(LicenseError::UserEmailMismatch)
+    }
+}
+
+/// The code a person entered: its ends trimmed as a key's are, then its
+/// spaces (U+0020) dropped, since a code read off an email is typed as
+/// `123 456` as often as `123456`. None when it is blank; else exactly six
+/// ASCII digits, or `UserCodeInvalid`.
+fn entered_code(code: Option<&str>) -> Result<Option<String>, LicenseError> {
+    let entered: String = js_trim(code.unwrap_or_default())
+        .chars()
+        .filter(|c| *c != ' ')
+        .collect();
+    if entered.is_empty() {
+        return Ok(None);
+    }
+    if entered.len() == CODE_DIGITS && entered.bytes().all(|b| b.is_ascii_digit()) {
+        Ok(Some(entered))
+    } else {
+        Err(LicenseError::UserCodeInvalid)
+    }
 }
 
 /// `value` cut to `max` UTF-16 units without splitting a character: a cut

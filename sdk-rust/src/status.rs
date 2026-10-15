@@ -251,6 +251,27 @@ pub enum LicenseError {
     /// The server's lease failed offline verification (an integrity or
     /// configuration error: the embedded public key is not the product's).
     InvalidLease,
+    /// A user-locked key asks a NEW device who it is. Ask the person for the
+    /// address the key was sold to and activate again with it
+    /// ([`ActivateOptions`](crate::ActivateOptions)).
+    UserEmailRequired,
+    /// Not the key's address (or longer than any); nothing is said of the
+    /// real one.
+    UserEmailMismatch,
+    /// A code was just mailed to that address: ask for it and activate again
+    /// with the address and the code.
+    UserCodeRequired,
+    /// The code is wrong, expired, used or not six digits: ask again, or
+    /// activate with the address alone for a new one.
+    UserCodeInvalid,
+    /// Three codes were sent for the key this hour.
+    TooManyCodes,
+    /// Too many wrong addresses or codes for the key this hour: try again
+    /// later.
+    TooManyAttempts,
+    /// The code could not be sent just now and nothing was activated: try
+    /// again.
+    TryAgain,
 }
 
 impl LicenseError {
@@ -264,6 +285,13 @@ impl LicenseError {
             LicenseError::Outdated => "outdated",
             LicenseError::Network => "network",
             LicenseError::InvalidLease => "invalid-lease",
+            LicenseError::UserEmailRequired => "user-email-required",
+            LicenseError::UserEmailMismatch => "user-email-mismatch",
+            LicenseError::UserCodeRequired => "user-code-required",
+            LicenseError::UserCodeInvalid => "user-code-invalid",
+            LicenseError::TooManyCodes => "too-many-codes",
+            LicenseError::TooManyAttempts => "too-many-attempts",
+            LicenseError::TryAgain => "try-again",
         }
     }
 }

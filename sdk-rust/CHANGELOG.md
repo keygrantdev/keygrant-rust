@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.0
+
+- User-locked keys: `License::activate_with(key, &ActivateOptions)` and
+  `License::import_license_file_with(content, &ActivateOptions)`. A licence model can let only the person a key
+  was sold to activate a new device on it, known by the address on the key (`email`), and, for a key that mails
+  a code to that address, by the code too. `ActivateOptions` holds both, each optional
+  (`ActivateOptions::new().email("...").code("...")`); `activate(key)` and `import_license_file(content)` are as
+  they were and send neither. Only a new device is ever asked: `refresh()`, `status()`, a renewal, a seat the key
+  already holds and offline behaviour are unchanged. Nothing about the address or the code is stored.
+- `LicenseError` has seven more cases, the refusals an app can act on: `UserEmailRequired` (ask for the
+  address), `UserEmailMismatch`, `UserCodeRequired` (a code was just mailed: ask for it), `UserCodeInvalid`,
+  `TooManyCodes`, `TooManyAttempts` and `TryAgain` (the code could not be sent: nothing was activated, ask
+  again). Their words are `user-email-required`, `user-email-mismatch`, `user-code-required`,
+  `user-code-invalid`, `too-many-codes`, `too-many-attempts` and `try-again`, so a Tauri front end reads them
+  from `ActivateError::code()` as it reads the others. A `match` over every `LicenseError` has seven more cases.
+- An address longer than 254 UTF-16 units, or a code that is not exactly six ASCII digits (spaces inside it
+  are dropped first), is refused by the SDK itself, for any key, before the server is asked
+  (`UserEmailMismatch`, `UserCodeInvalid`). The conformance vectors' two new groups, `typedFor` and
+  `userLockErrors`, hold this to the reference.
+
 ## 0.5.0
 
 - Licence files: `License::import_license_file(content)` takes a `.kglicense` file's content (`&str`,
