@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use serde_json::{Map, Value};
 
 use super::ISSUER;
+use crate::meters::{meters_json, meters_of, BaseFigure};
 use crate::status::DeviceKind;
 use crate::wire::utf16_len;
 
@@ -111,8 +112,8 @@ impl Serialize for Entitlement {
 }
 
 /// A lease's claims, read as the server's schema reads them: unknown claims
-/// ignored, `major` defaulting to 0, and `ent` read leniently (empty when
-/// absent or not an object, a malformed member dropped). Times are SECONDS
+/// ignored, `major` defaulting to 0, and `ent` and `met` read leniently (empty
+/// when absent or not an object, a malformed member dropped). Times are SECONDS
 /// since the epoch.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LeaseClaims {
@@ -144,6 +145,11 @@ pub struct LeaseClaims {
     /// text is dropped, and an `ent` that is not an object is empty, never bad
     /// claims.
     pub ent: BTreeMap<String, Entitlement>,
+    /// The key's meters as the lease signs them (`met`), by code, read
+    /// leniently ([`meters_of`](crate::meters::meters_of)): a member that is not
+    /// a well-formed meter is dropped, never the lease. None when the lease has
+    /// no such claim; a claim that is not an object reads as an empty map.
+    pub met: Option<BTreeMap<String, BaseFigure>>,
     /// Issued at (seconds).
     pub iat: i64,
     /// Expires at (seconds): the grace boundary.
@@ -208,6 +214,9 @@ impl LeaseClaims {
             .map(|(name, value)| (name.clone(), value.to_json()))
             .collect();
         put("ent", Value::Object(ent));
+        if let Some(met) = &self.met {
+            put("met", meters_json(met));
+        }
         put("iat", Value::from(self.iat));
         put("exp", Value::from(self.exp));
         if let Some(grace) = self.grace {
@@ -268,6 +277,7 @@ pub(super) fn parse_claims(value: &Value) -> Option<LeaseClaims> {
         min_major: optional(map, "minMajor", |v| integer(v).filter(|n| *n > 0))?,
         upgrade_until: optional(map, "upgradeUntil", |v| integer(v).filter(|n| *n >= 0))?,
         ent: map.get("ent").map(entitlements_of).unwrap_or_default(),
+        met: map.get("met").map(meters_of),
         iat: integer(map.get("iat")?).filter(|n| *n >= 0)?,
         exp: integer(map.get("exp")?).filter(|n| *n >= 0)?,
         grace: optional(map, "grace", Value::as_bool)?,

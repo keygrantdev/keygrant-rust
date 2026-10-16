@@ -1,9 +1,14 @@
 //! The state the SDK keeps on the device, in the Electron SDK's file format,
 //! and the patches its saves are made of.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 
+use crate::meters::{
+    spend_json, spends_of, stored_figure_json, stored_figures, MeterFigure, SpendEntry,
+};
 use crate::status::{DeviceKind, Refusal};
 
 /// A stored field's value, read leniently: a value of the wrong type is read
@@ -44,6 +49,31 @@ impl Field for Vec<String> {
     }
     fn to_json(&self) -> Value {
         Value::Array(self.iter().cloned().map(Value::String).collect())
+    }
+}
+
+/// The journal: entries of another shape are left out, and an empty journal is
+/// the field absent (the state is the device's own, never the server's word).
+impl Field for Vec<SpendEntry> {
+    fn from_json(value: &Value) -> Option<Self> {
+        Some(spends_of(value)).filter(|spends| !spends.is_empty())
+    }
+    fn to_json(&self) -> Value {
+        Value::Array(self.iter().map(spend_json).collect())
+    }
+}
+
+/// The newest figures of each meter: a member of another shape is left out.
+impl Field for BTreeMap<String, MeterFigure> {
+    fn from_json(value: &Value) -> Option<Self> {
+        Some(stored_figures(value)).filter(|figures| !figures.is_empty())
+    }
+    fn to_json(&self) -> Value {
+        Value::Object(
+            self.iter()
+                .map(|(code, figure)| (code.clone(), stored_figure_json(figure)))
+                .collect(),
+        )
     }
 }
 
@@ -145,6 +175,11 @@ macro_rules! state_fields {
         }
 
         impl Patch {
+            /// Whether it touches no field.
+            pub fn is_empty(&self) -> bool {
+                true $( && self.$field.is_none() )*
+            }
+
             /// This patch with `later`'s fields over it, as `{ ...this, ...later }`.
             pub fn then(mut self, later: Patch) -> Patch {
                 $( if later.$field.is_some() { self.$field = later.$field; } )*
@@ -257,6 +292,16 @@ state_fields! {
     /// value that is not text is read as none, as every field of the wrong
     /// type is.
     license_file: String = "licenseFile";
+    /// The journal of this device's spends KeyGrant has not confirmed yet,
+    /// oldest first, about the stored activation: reported with the next
+    /// check-in, `use` or `deactivate`, and dropped only when the server
+    /// confirms it. At most 64 entries. Absent when there are none; entries of
+    /// another shape are read as none.
+    spends: Vec<SpendEntry> = "spends";
+    /// The newest figures a `use` answer gave for each meter, by code, about the
+    /// stored activation: newer than the stored lease's own `met` until the
+    /// lease is renewed.
+    meter_figures: BTreeMap<String, MeterFigure> = "meterFigures";
     /// The default storage's revision of this state, one more on every save.
     rev: i64 = "rev";
 }

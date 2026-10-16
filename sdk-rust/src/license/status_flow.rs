@@ -2,7 +2,8 @@
 
 use super::{invalid, License};
 use crate::device::Device;
-use crate::engine::Holder;
+use crate::engine::{Holder, View};
+use crate::meters::metered_status;
 use crate::offline::{
     ask_due, kept_with, lease_status, standing_refusal, About, Basis, DeviceView, LeaseCheck,
 };
@@ -15,10 +16,11 @@ impl License {
     /// is stored only, with no ask and no write.
     pub(super) fn status_now(
         &self,
-        state: &StoredState,
+        view: &View,
         force_online: bool,
         read_only: bool,
     ) -> LicenseStatus {
+        let state: &StoredState = view;
         // A stored offline licence file that licenses this build wins, offline,
         // with no ask and no write; one that does not answers only when no key
         // path and no running trial does.
@@ -32,20 +34,20 @@ impl License {
             self.engine
                 .device(self.engine.timings.machine_id, state.device_kind)
         });
-        let view = device.as_ref().map(|device| DeviceView {
+        let device_view = device.as_ref().map(|device| DeviceView {
             own_claim: device.own_claim.as_deref(),
             can_tell: device.can_tell,
         });
         let key = present(&state.key);
-        let refused = key.and_then(|_| standing_refusal(state, self.engine.major, view));
+        let refused = key.and_then(|_| standing_refusal(state, self.engine.major, device_view));
         if let Some(refused) = refused {
             if read_only {
                 return invalid(refused.reason(), key);
             }
-            return self.refused_status(state, refused, force_online);
+            return self.refused_status(view, refused, force_online);
         }
         if let (Some(_), Some(lease)) = (key, present(&state.lease)) {
-            return self.license_status(state, lease, now, force_online, read_only);
+            return self.license_status(view, lease, now, force_online, read_only);
         }
         // With no key to answer: a trial this device started while it runs,
         // else a stored file that does not license this build (why is the
@@ -66,7 +68,7 @@ impl License {
     /// again once the wait after the last ask is over, or when forced.
     pub(super) fn refused_status(
         &self,
-        state: &StoredState,
+        state: &View,
         refused: Refusal,
         force: bool,
     ) -> LicenseStatus {
@@ -79,12 +81,13 @@ impl License {
 
     pub(super) fn license_status(
         &self,
-        state: &StoredState,
+        view: &View,
         lease: &str,
         now: i64,
         force_online: bool,
         read_only: bool,
     ) -> LicenseStatus {
+        let state: &StoredState = view;
         let check = self.engine.evaluate(lease, now, &Holder::of(state));
         // What the lease says offline, entitlements included: the answer
         // whenever the server gives no verdict (offline.rs `lease_status`).
@@ -94,27 +97,38 @@ impl License {
             // give the server a chance to heal it before locking the customer
             // out, once the wait is over, or when forced.
             if !read_only && ask_due(state, self.engine.clock.now(), force_online) {
-                if let Some(renewed) = self.engine.try_renew(state, None) {
+                if let Some(renewed) = self.engine.try_renew(view, None) {
                     return renewed;
                 }
             }
             return offline;
         };
+        // What the lease says offline carries the key's meters, net of the journal.
+        let offline = metered_status(offline, &claims, state);
         if read_only {
             return offline;
         }
-        let held = self.note_kept(state, claims.upgrade_until, now);
+        let held = self.note_kept(view, claims.upgrade_until, now);
         if force_online {
             return self.engine.try_renew(&held, None).unwrap_or(offline);
         }
         // Asked, bounded in time, when the server should hear from this
         // device before the lease runs out (a newer major on an open lease, or
         // a lease nearing its end) and the wait allows (renewal.rs
-        // `asks_on_valid_lease`). The valid lease is the answer when the ask
-        // gets no verdict.
+        // `asks_on_valid_lease`), or when the device holds spends KeyGrant has
+        // not heard of and the journal's own wait is not running. The journal
+        // that asks is the one a request would report (`Engine::reportable`):
+        // spends held in memory that no request carries do not make `status()`
+        // ask at every call. The valid lease is the answer when the ask gets no
+        // verdict.
+        let reportable = self.engine.reportable(&held);
+        let asking = StoredState {
+            spends: Some(reportable).filter(|spends| !spends.is_empty()),
+            ..held.state.clone()
+        };
         let ask = ValidLeaseAsk {
             claims: &claims,
-            state: &held,
+            state: &asking,
             major: self.engine.major,
             now,
             clock_now: self.engine.clock.now(),
@@ -128,15 +142,11 @@ impl License {
     }
 
     /// The state with this run noted in `kept_major`, persisted when that changed.
-    pub(super) fn note_kept(
-        &self,
-        state: &StoredState,
-        upgrade_until: Option<i64>,
-        now: i64,
-    ) -> StoredState {
+    pub(super) fn note_kept(&self, view: &View, upgrade_until: Option<i64>, now: i64) -> View {
+        let state: &StoredState = view;
         let kept = kept_with(state.kept_major, upgrade_until, now, self.engine.major);
         if kept == state.kept_major {
-            return state.clone();
+            return view.clone();
         }
         // About this activation: not saved onto another one stored meanwhile.
         let basis = Basis {
@@ -153,9 +163,9 @@ impl License {
             None,
             &basis,
         );
-        StoredState {
+        view.with(StoredState {
             kept_major: kept,
             ..state.clone()
-        }
+        })
     }
 }

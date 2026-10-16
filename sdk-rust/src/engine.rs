@@ -3,11 +3,11 @@
 //! validate with what its answer does to the stored state. `License` decides
 //! when to go online and what to answer.
 
+mod journal;
 mod renewal_ask;
 
 use std::io;
-use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde_json::Value;
@@ -25,14 +25,16 @@ use crate::http::UreqHttp;
 use crate::lease::{verify_lease, KeySet, VerifyResult};
 use crate::license_file::{check_license_file, verify_license_file, LicenseFileCheck};
 use crate::offline::{
-    check_lease, guarded_now, major_of, merged, saved_last_seen, trial_lease_of, Basis, LeaseCheck,
-    LeaseHolder, TrialLease,
+    check_lease, guarded_now, major_of, trial_lease_of, Basis, LeaseCheck, LeaseHolder, TrialLease,
 };
 use crate::serial::Serial;
 use crate::state::{Patch, StoredState};
 use crate::status::{DeviceKind, LicenseStatus};
 use crate::storage::{default_storage_path, legacy_storage_path, FileStorage, FileStorageOptions};
 use crate::wire::js_trim;
+
+use journal::Held;
+pub(crate) use journal::View;
 
 /// The outcome of an online validate: the server's verdict, or no answer at all.
 pub(crate) enum Renewal {
@@ -82,6 +84,8 @@ pub(crate) struct Engine {
     device_hold: bool,
     pub timings: Timings,
     serial: Serial,
+    /// Journal changes this process could not save (`journal.rs`).
+    held: Mutex<Held>,
 }
 
 /// Whether a product slug can name a file and a URL path segment.
@@ -155,6 +159,7 @@ impl Engine {
             device_hold: config.device_hold,
             timings: config.timings,
             serial: Serial::new(),
+            held: Mutex::new(Held::default()),
         })
     }
 
@@ -241,6 +246,12 @@ impl Engine {
             .read(timeout, install_kind, self.device_hold)
     }
 
+    /// How long a `use` request may take: the status check's bound (5 seconds),
+    /// or the HTTP bound when that is shorter.
+    pub fn use_timeout(&self) -> Duration {
+        self.timings.status_check.min(self.http_timeout)
+    }
+
     /// The install's kind as it bears on this device: none when nothing is held.
     pub fn install_kind(&self, stored: Option<DeviceKind>) -> Option<DeviceKind> {
         if self.device_hold {
@@ -248,37 +259,6 @@ impl Engine {
         } else {
             None
         }
-    }
-
-    /// The stored state; `read_only` behind a call that has not finished.
-    ///
-    /// A storage adapter that panics is a state that cannot be read: an error,
-    /// which `status()` and `start_trial()` answer as `Unknown`.
-    pub fn load(&self, read_only: bool) -> io::Result<StoredState> {
-        let storage = &self.storage;
-        let read = catch_unwind(AssertUnwindSafe(|| storage.read(read_only)))
-            .unwrap_or_else(|_| Err(panicked("read")));
-        Ok(read?.unwrap_or_default())
-    }
-
-    /// Persist a patch onto the state as it is stored NOW, merged by what it
-    /// is based on, and advance the clock guard (or set it to `guard`).
-    pub fn save(&self, patch: &Patch, guard: Option<i64>, basis: &Basis) -> io::Result<()> {
-        let clock = Arc::clone(&self.clock);
-        let merge = |latest: StoredState| {
-            let mut next = merged(&latest, patch, basis);
-            next.last_seen = Some(saved_last_seen(latest.last_seen, clock.now(), guard));
-            next
-        };
-        // A storage adapter that panics is a save that failed.
-        catch_unwind(AssertUnwindSafe(|| {
-            if let Some(result) = self.storage.update(&merge) {
-                return result;
-            }
-            let latest = self.load(false)?;
-            self.storage.write(&merge(latest))
-        }))
-        .unwrap_or_else(|_| Err(panicked("save")))
     }
 
     /// A save whose failure fails nothing: the answer stands. Whether it was saved.

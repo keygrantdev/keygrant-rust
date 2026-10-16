@@ -8,6 +8,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 use crate::lease::Entitlement;
+use crate::meters::MeterStatus;
 
 /// What [`License::status`](crate::License::status) says of the licence.
 ///
@@ -154,6 +155,18 @@ pub struct LicenseStatus {
     /// nothing the next status says.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub entitlements: BTreeMap<String, Entitlement>,
+    /// The key's meters, by code, as its lease signs them (the `met` claim) or
+    /// the last answer to a spend gave them, net of the uses this device spent
+    /// that KeyGrant has not heard of yet:
+    /// `status.meters.get("exports").map(|m| m.left)`. Works offline.
+    ///
+    /// On a `Licensed` status from a key's lease that names meters only. Empty
+    /// on every other status (a trial, a stored offline licence file, a stored
+    /// refusal, an expired lease and none at all have no meters), and when the
+    /// lease names none. A copy: changing it changes nothing the next status
+    /// says.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub meters: BTreeMap<String, MeterStatus>,
     /// [`LicenseSource::File`] when the status rests on a stored offline
     /// licence file, licensed or not; none for a key's lease, a trial and no
     /// licence.
@@ -186,6 +199,7 @@ impl LicenseStatus {
             trial_ends_at: None,
             test: false,
             entitlements: BTreeMap::new(),
+            meters: BTreeMap::new(),
             source: None,
             licensed_to: None,
             stalled: false,

@@ -129,7 +129,8 @@ impl HttpAdapter for UreqHttp {
             .body_mut()
             .read_to_string()
             .ok()
-            .and_then(|text| serde_json::from_str(&text).ok());
+            // As a lease's payload is read: a number out of a double's range fails nothing.
+            .and_then(|text| crate::lease::parse_json(&text));
         Ok(HttpResponse { status, json })
     }
 }

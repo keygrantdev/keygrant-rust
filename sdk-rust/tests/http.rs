@@ -188,3 +188,21 @@ fn reads_a_status_as_an_answer_even_over_an_agent_that_would_not() {
     assert_eq!(response.status, 404);
     assert_eq!(response.json, Some(json!({ "error": "invalid-key" })));
 }
+
+#[test]
+fn reads_a_number_out_of_a_doubles_range_as_the_reference_reads_it_not_as_a_body_that_is_no_json() {
+    // JavaScript reads 1e400 as infinity and the answer stands: a figure the SDK reads
+    // leniently (a meter's) drops its member, never the answer it rides in.
+    let body = r#"{"spent":true,"at":5,"meters":{"x":{"left":1e400,"total":2,"offline":0},"y":{"left":1,"total":2,"offline":0}}}"#;
+    let (base, _seen) = serve(Reply::With("200 OK", "application/json", body.to_owned()));
+    let response = direct()
+        .post(&format!("{base}/v1/products/sluice/use"), &json!({}), BOUND)
+        .expect("an answer");
+    assert_eq!(response.status, 200);
+    let json = response.json.expect("the body is JSON");
+    assert_eq!(json["spent"], true);
+    let kept: Vec<String> = keygrant::meters::meters_of(&json["meters"])
+        .into_keys()
+        .collect();
+    assert_eq!(kept, ["y"]);
+}

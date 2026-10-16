@@ -3,8 +3,8 @@
 //! A licence is proven to the app by a signed JWT lease (EdDSA / Ed25519)
 //! that the app verifies OFFLINE against the product's public key. The app
 //! only phones home to activate, to renew a lease near or past its end, to
-//! report a newer major version, or to report a running trial's launch (at
-//! most once a day).
+//! report a newer major version, to report a running trial's launch (at
+//! most once a day), or to spend a metered use ([`License::use_meter`]).
 //!
 //! **Licensing failure fails in favour of the paying customer.** An outage, no
 //! network, a 5xx, a 429, an ambiguous 4xx or an unusable body never locks
@@ -41,11 +41,15 @@ mod error;
 mod fingerprint;
 mod http;
 #[doc(hidden)]
+pub mod journal;
+#[doc(hidden)]
 pub mod launch;
 pub mod lease;
 mod license;
 pub mod license_file;
 pub mod machine_id;
+#[doc(hidden)]
+pub mod meters;
 #[doc(hidden)]
 pub mod offline;
 mod registry;
@@ -80,6 +84,10 @@ pub use lease::{grants, Entitlement, KeySet};
 pub use license::{ActivateOptions, ImportedLicenseFile, License};
 pub use license_file::{
     LicenseFileError, LicenseFileKind, LICENSE_FILE_EXTENSION, LICENSE_FILE_MEDIA_TYPE,
+};
+pub use meters::{
+    BaseFigure, MeterFigure, MeterStatus, SpendEntry, SpendKind, UseError, UseResult,
+    MAX_METER_USES,
 };
 #[cfg(windows)]
 pub use registry::WindowsRegistryStash;

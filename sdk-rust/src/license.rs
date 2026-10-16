@@ -6,6 +6,7 @@ use std::thread::JoinHandle;
 
 mod activation;
 mod files;
+mod meters;
 mod options;
 mod status_flow;
 
@@ -194,6 +195,7 @@ impl License {
         self.engine.serial(|read_only| {
             if !read_only {
                 self.save_unsaved_trial();
+                self.engine.save_unsaved_journal();
             }
             let status = match self.load_for_status(read_only) {
                 Some(state) => self.status_now(&state, force_online, read_only),

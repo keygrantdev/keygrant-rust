@@ -11,6 +11,7 @@ use std::time::Duration;
 use serde_json::{Map, Value};
 
 use crate::device::Device;
+use crate::engine::View;
 use crate::license::License;
 use crate::offline::{
     ask_due, merged, trial_status_of, Basis, Stamp, TrialLease, ASK_AGAIN_MS, RETRY_UNANSWERED_MS,
@@ -28,11 +29,14 @@ impl License {
 
     /// The stored state for a status, with a trial this process could not
     /// save; or none when it cannot be read just now.
-    pub(crate) fn load_for_status(&self, read_only: bool) -> Option<StoredState> {
-        let state = self.engine.load(read_only).ok()?;
+    pub(crate) fn load_for_status(&self, read_only: bool) -> Option<View> {
+        let view = self.engine.view(read_only).ok()?;
         match self.unsaved().as_ref() {
-            Some((patch, basis)) => Some(merged(&state, patch, basis)),
-            None => Some(state),
+            Some((patch, basis)) => {
+                let merged = merged(&view.state, patch, basis);
+                Some(view.with(merged))
+            }
+            None => Some(view),
         }
     }
 

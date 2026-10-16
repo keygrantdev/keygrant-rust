@@ -13,6 +13,7 @@
 
 use crate::adapters::HttpResponse;
 use crate::lease::{LeaseClaims, OPEN_MAJOR};
+use crate::meters::journal_asks;
 use crate::offline::{
     ask_due, kept_with, keyed_by, lease_status, leased, refusal_patch, renews_early, LeaseCheck,
     LeaseFailure, ASK_AGAIN_MS, RETRY_UNANSWERED_MS,
@@ -203,8 +204,9 @@ fn invalid(reason: crate::status::LicenseReason, key: Option<&str>) -> LicenseSt
 pub struct ValidLeaseAsk<'a> {
     /// The lease's claims: its `major`, and its `iat` and `exp` (seconds).
     pub claims: &'a LeaseClaims,
-    /// The stored state: the major the server last heard (`checkedMajor`), and
-    /// the wait (`backoffSince`, `backoffMs`).
+    /// The stored state: the major the server last heard (`checkedMajor`), the
+    /// wait (`backoffSince`, `backoffMs`), and the journal of unsynced spends
+    /// (`spends`) a request would report.
     pub state: &'a StoredState,
     /// This build's major.
     pub major: i64,
@@ -224,6 +226,7 @@ pub struct ValidLeaseAsk<'a> {
 pub fn asks_on_valid_lease(ask: &ValidLeaseAsk<'_>) -> bool {
     let new_major =
         ask.claims.major >= OPEN_MAJOR && ask.major > ask.state.checked_major.unwrap_or(0);
-    let due = new_major || renews_early(ask.claims, ask.now);
+    let journal = ask.state.spends.as_deref().unwrap_or_default();
+    let due = new_major || renews_early(ask.claims, ask.now) || journal_asks(journal, ask.now);
     due && ask_due(ask.state, ask.clock_now, false)
 }

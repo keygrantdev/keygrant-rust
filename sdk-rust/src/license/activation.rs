@@ -3,9 +3,11 @@
 use serde_json::{Map, Value};
 
 use super::{ActivateOptions, License};
-use crate::device::activation_identity;
-use crate::engine::{GuardSave, Holder};
+use crate::device::{activation_identity, Device};
+use crate::engine::{GuardSave, Holder, View};
 use crate::error::{ActivateError, ActivateResult, Error};
+use crate::journal::JournalOp;
+use crate::meters::spends_reported;
 use crate::offline::{
     activation_patch, held_elsewhere, same_key, standing_refusal, unkeyed, Activation, Asked,
     Basis, DeviceView, LeaseCheck,
@@ -56,37 +58,57 @@ impl License {
         let (Some(lease), Some(activation_id)) = (usable(lease), usable(activation_id)) else {
             return Err(LicenseError::Network.into());
         };
+        let asked = Asked {
+            at: asked_at,
+            activation_id: Some(activation_id),
+            seen: stored.verdict_at,
+        };
+        self.take_seat(&entered, &lease, kind, asked)
+    }
+
+    /// The seat the server just gave: its lease judged here as of the server's
+    /// time, and saved with the key and the activation as an activation's
+    /// answer (`asked` names the activation). Activating another seat drops
+    /// the journal of the old one, unreported; the same seat keeps it.
+    fn take_seat(
+        &self,
+        entered: &str,
+        lease: &str,
+        kind: Option<DeviceKind>,
+        asked: Asked,
+    ) -> ActivateResult {
+        let activation_id = asked.activation_id.clone().unwrap_or_default();
         let now = self
             .engine
-            .server_now(&lease, &entered, &activation_id, GuardSave::Strict)
+            .server_now(lease, entered, &activation_id, GuardSave::Strict)
             .map_err(ActivateError::Storage)?;
         let holder = Holder {
-            key: Some(&entered),
+            key: Some(entered),
             activation_id: Some(&activation_id),
             device_kind: kind,
         };
-        let LeaseCheck::Ok { claims, .. } = self.engine.evaluate(&lease, now, &holder) else {
+        let LeaseCheck::Ok { claims, .. } = self.engine.evaluate(lease, now, &holder) else {
             return Err(LicenseError::InvalidLease.into());
         };
         let patch = activation_patch(&Activation {
-            key: &entered,
+            key: entered,
             activation_id: &activation_id,
-            lease: &lease,
+            lease,
             claims: &claims,
             now,
             major: self.engine.major,
             kind,
         });
+        let seat = JournalOp::Activated {
+            about: activation_id,
+        };
         let basis = Basis {
-            activation: Some(Asked {
-                at: asked_at,
-                activation_id: Some(activation_id),
-                seen: stored.verdict_at,
-            }),
+            activation: Some(asked),
             ..Basis::default()
         };
         self.engine
-            .save(&patch, None, &basis)
+            .save_with(&patch, None, &basis, &[seat])
+            .map(|_| ())
             .map_err(ActivateError::Storage)
     }
 
@@ -121,35 +143,59 @@ impl License {
     }
 
     pub(super) fn deactivate_now(&self) -> Result<DeactivateResult, Error> {
-        let state = self.engine.load(false).map_err(Error::Storage)?;
+        // What this process could not save lands first, so the release reports
+        // it: the journal goes with the seat.
+        self.engine.save_unsaved_journal();
+        let view = self.engine.view(false).map_err(Error::Storage)?;
+        let state: &StoredState = &view;
         // Nothing held is nothing to release: the seat is as free as it gets.
         // Nor is a seat another device holds this one's to release.
         let mut released = true;
-        let held = match (present(&state.key), present(&state.activation_id)) {
-            (Some(key), Some(activation_id)) if !self.seat_elsewhere(&state) => {
-                Some((key, activation_id))
-            }
-            _ => None,
-        };
-        if let Some((key, activation_id)) = held {
-            // Only a 200 is KeyGrant saying the seat is free. A 5xx, a 429 or a
-            // proxy's page is an answer, but not that one, and no answer is
-            // none; the local licence is dropped below either way.
-            let body = serde_json::json!({ "key": key, "activationId": activation_id });
-            released = self
+        if let (Some(key), Some(activation_id)) =
+            (present(&state.key), present(&state.activation_id))
+        {
+            let device = self
                 .engine
-                .post("deactivate", body, None)
-                .is_ok_and(|response| response.status == 200);
+                .device(self.engine.timings.machine_id, state.device_kind);
+            if !self.seat_elsewhere(state, &device) {
+                released = self.release(&view, key, activation_id, &device);
+            }
         }
-        // Stamped, so that an answer to an older ask is not saved over it.
+        // Stamped, so that an answer to an older ask is not saved over it. The
+        // journal goes with the rest of the licence: what the release carried is
+        // all the server will hear of it.
         let patch = unkeyed().then(Patch {
-            verdict_at: Some(Some(self.engine.effective_now(&state))),
+            verdict_at: Some(Some(self.engine.effective_now(state))),
             ..Patch::default()
         });
         self.engine
-            .save(&patch, None, &Basis::default())
+            .save_with(&patch, None, &Basis::default(), &[JournalOp::Deactivated])
             .map_err(Error::Storage)?;
         Ok(DeactivateResult { released })
+    }
+
+    /// The release request, carrying the journal of unsynced spends and, with
+    /// it, the device's fingerprints as a validate sends them (so the server
+    /// holds the reports to the seat's device; none when it cannot tell). Only a
+    /// 200 is KeyGrant saying the seat is free: a 5xx, a 429 or a proxy's page
+    /// is an answer, but not that one, and no answer is none; the local licence
+    /// is dropped by the caller either way.
+    fn release(&self, view: &View, key: &str, activation_id: &str, device: &Device) -> bool {
+        let mut body = Map::new();
+        body.insert("key".into(), Value::from(key));
+        body.insert("activationId".into(), Value::from(activation_id));
+        if let Some(reports) = spends_reported(&self.engine.reportable(view)) {
+            body.insert("spends".into(), reports);
+            if device.can_tell {
+                body.insert(
+                    "fingerprints".into(),
+                    Value::from(device.fingerprints.clone()),
+                );
+            }
+        }
+        self.engine
+            .post("deactivate", Value::Object(body), None)
+            .is_ok_and(|response| response.status == 200)
     }
 
     /// Whether the stored activation is another device's: a device refusal
@@ -157,10 +203,7 @@ impl License {
     /// does not have, expired or not (`held_elsewhere`). A state file copied
     /// or restored from another PC carries that PC's activation; releasing it
     /// would lock that PC out at its next check-in.
-    pub(super) fn seat_elsewhere(&self, state: &StoredState) -> bool {
-        let device = self
-            .engine
-            .device(self.engine.timings.machine_id, state.device_kind);
+    pub(super) fn seat_elsewhere(&self, state: &StoredState, device: &Device) -> bool {
         let view = DeviceView {
             own_claim: device.own_claim.as_deref(),
             can_tell: device.can_tell,

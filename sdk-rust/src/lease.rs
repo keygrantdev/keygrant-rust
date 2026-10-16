@@ -24,9 +24,9 @@ mod keys;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use base64::b64url_decode_canonical;
 #[cfg(test)]
-use base64::{b64url_decode, b64url_encode};
+use base64::b64url_decode;
+pub(crate) use base64::{b64url_decode_canonical, b64url_encode};
 use claims::parse_claims;
 pub use claims::{entitlements_of, grants, Entitlement, LeaseClaims, LicenseModel};
 pub(crate) use claims::{optional, string};
@@ -160,7 +160,7 @@ pub fn verify_lease(token: &str, keys: &KeySet, now_ms: i64) -> VerifyResult {
     }
     let claims = b64url_decode_canonical(payload)
         .map(|bytes| decode_utf8(&bytes))
-        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+        .and_then(|text| parse_json(&text))
         .and_then(|value| parse_claims(&value));
     let Some(claims) = claims else {
         return invalid(VerifyFailure::BadClaims);
@@ -172,6 +172,64 @@ pub fn verify_lease(token: &str, keys: &KeySet, now_ms: i64) -> VerifyResult {
         };
     }
     VerifyResult::Valid(claims)
+}
+
+/// JSON text as JavaScript's `JSON.parse` reads it, in the one way that matters
+/// to a lease: a number out of a double's range (`1e400`) reads as infinity
+/// there and fails the parse here. It fails nothing in a lease, which a figure
+/// the SDK reads leniently (a meter's) must not cost: such a number is read as
+/// the largest double of its sign, which no figure, count or time of a lease
+/// holds either, so every figure, count and time that rejects infinity rejects it
+/// too. An entitlement keeps it, as JavaScript keeps `Infinity` there. The HTTP
+/// adapter reads every answer's body through it. None when the text is not JSON.
+pub fn parse_json(text: &str) -> Option<Value> {
+    if let Ok(value) = serde_json::from_str::<Value>(text) {
+        return Some(value);
+    }
+    serde_json::from_str(&clamp_infinite_numbers(text)?).ok()
+}
+
+/// `text` with every number token outside a string that reads as infinity
+/// replaced by the largest double of its sign; none when there is no such token.
+fn clamp_infinite_numbers(text: &str) -> Option<String> {
+    let bytes = text.as_bytes();
+    let (mut out, mut copied, mut at) = (String::new(), 0, 0);
+    while at < bytes.len() {
+        match bytes[at] {
+            b'"' => {
+                // Past the string, escapes included.
+                at += 1;
+                while at < bytes.len() && bytes[at] != b'"' {
+                    at += if bytes[at] == b'\\' { 2 } else { 1 };
+                }
+                at += 1;
+            }
+            b'-' | b'0'..=b'9' => {
+                let start = at;
+                at += 1;
+                while at < bytes.len()
+                    && matches!(bytes[at], b'0'..=b'9' | b'+' | b'-' | b'.' | b'e' | b'E')
+                {
+                    at += 1;
+                }
+                let token = &text[start..at];
+                if token.parse::<f64>().is_ok_and(f64::is_infinite) {
+                    out.push_str(&text[copied..start]);
+                    out.push_str(if token.starts_with('-') {
+                        "-1.7976931348623157e308"
+                    } else {
+                        "1.7976931348623157e308"
+                    });
+                    copied = at;
+                }
+            }
+            _ => at += 1,
+        }
+    }
+    (copied > 0).then(|| {
+        out.push_str(&text[copied..]);
+        out
+    })
 }
 
 /// Bytes as text the way JavaScript's `TextDecoder` (UTF-8, the default)

@@ -22,6 +22,11 @@ mod files;
 #[allow(unused_imports)]
 pub use files::*;
 
+mod meters;
+// Used by the metered-uses suites only; every suite includes this module.
+#[allow(unused_imports)]
+pub use meters::*;
+
 pub const NOW: i64 = 1_757_000_000_000;
 pub const DAY: i64 = 86_400_000;
 pub const PRODUCT: &str = "sluice";
@@ -173,6 +178,12 @@ impl Gate {
     pub fn reached(&self) -> bool {
         lock(&self.inner.0).0
     }
+    /// The gate, released when the guard goes out of scope, however it does: a
+    /// test whose assertion fails while a call waits here ends at once, rather
+    /// than after the gate's 30 seconds.
+    pub fn releasing(&self) -> Releasing {
+        Releasing(self.clone())
+    }
     /// Wait (up to 10 s) until something waits here.
     pub fn await_reached(&self) {
         for _ in 0..2000 {
@@ -182,6 +193,16 @@ impl Gate {
             std::thread::sleep(Duration::from_millis(5));
         }
         panic!("nothing reached the gate");
+    }
+}
+
+/// Releases its gate when dropped (`Gate::releasing`).
+#[must_use = "the gate is released when this is dropped: bind it"]
+pub struct Releasing(Gate);
+
+impl Drop for Releasing {
+    fn drop(&mut self) {
+        self.0.release();
     }
 }
 

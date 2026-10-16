@@ -5,8 +5,8 @@ KeyGrant licensing for **Tauri** and native **Rust** desktop apps.
 A licence is proven to the app by a signed JWT lease (JWS, EdDSA / Ed25519)
 that the app verifies **offline** against the product's public key. The app
 only phones home to activate, to renew a lease near or past its end, to tell
-the server about a newer major version, or to report a running trial's launch
-(at most once a day).
+the server about a newer major version, to report a running trial's launch
+(at most once a day), or to spend a metered use.
 
 **Licensing failure fails in favour of the paying customer.** An outage, no
 network, a timeout, a 5xx, a 429, an ambiguous 4xx or a body the SDK cannot use
@@ -28,7 +28,7 @@ The full guide is at https://keygrant.dev/docs.
 
 ```toml
 [dependencies]
-keygrant = "0.6"
+keygrant = "0.7"
 ```
 
 or `cargo add keygrant`.
@@ -172,7 +172,7 @@ fn main() {
 ```
 
 `LicenseStatus` serialises exactly as the Electron SDK's (camelCase, absent
-fields left out, `test` and `stalled` only when true, `entitlements` only when
+fields left out, `test` and `stalled` only when true, `entitlements` and `meters` only when
 there are any, `source` and `licensedTo` only from a licence file), so a front end written for the Electron SDK reads it
 unchanged:
 
@@ -180,7 +180,8 @@ unchanged:
 { "state": "trial", "trialEndsAt": 1790432000000, "trialDaysLeft": 5 }
 ```
 
-`DeactivateResult` serialises as the Electron SDK's (`{"released": true}`),
+`DeactivateResult` serialises as the Electron SDK's (`{"released": true}`), `UseResult` as its
+`{"ok": true, "left": 89}` or `{"ok": false, "error": "used-up", "left": 1}`,
 `ImportedLicenseFile` as its `{"kind": ..., "licensedTo": ...}`, and
 `ActivateError`, `ImportError` and `Error` implement `Serialize` as their word.
 
@@ -353,6 +354,78 @@ address, then the code. A key that is not locked ignores both once they reach
 the server. `import_license_file_with(content, &options)` passes them on to a
 key file's key. `deactivate()`, `refresh()` and `start_trial()` take neither.
 
+## Metered uses: counting what a key may do
+
+A licence model can count uses of what it sells: 1,000 exports for good, or 50 renders each billing
+period. The app spends them with `use_meter(meter, n)` (`use` is a Rust keyword), before the work they
+count, and does the work only when the spend is `ok`:
+
+```rust
+use keygrant::UseError;
+
+let spent = license.use_meter("exports", 1); // use_meter("exports", 40) spends forty at once, whole or none
+if spent.ok {
+    run_export(); // spent.left: what is left now, net of this device's unsynced spends
+} else {
+    match spent.error {
+        // The server's word: fewer left than asked (spent.left says how many, when it gave a number).
+        Some(UseError::UsedUp) => offer_more_exports(spent.left),
+        // KeyGrant could not be reached, and this is past what this device may spend without it.
+        Some(UseError::OfflineLimit) => ask_to_connect(),
+        // NoMeter, NotLicensed, Revoked, Device, Upgrade, Outdated, Storage, InvalidAmount.
+        other => show_meter_problem(other),
+    }
+}
+
+let status = license.status(false); // offline, from the lease
+status.meters["exports"]; // MeterStatus { left: 950, total: 1000, offline: 100, unsynced: 0, resets: false }
+```
+
+In a Tauri command, run it on the blocking pool like every other call:
+
+```rust
+#[tauri::command]
+async fn export_spend(license: tauri::State<'_, Arc<License>>) -> Result<UseResult, String> {
+    let license = Arc::clone(&license);
+    tauri::async_runtime::spawn_blocking(move || license.use_meter("exports", 1))
+        .await
+        .map_err(|e| e.to_string())
+}
+```
+
+- **Online it is exact.** The server takes `n` only while the meter has room for all of it. Two calls are
+  two spends; the SDK's own retries and reports never count one twice.
+- **With no answer it spends from an allowance.** No network, a timeout, a 5xx, a 429 or an answer the SDK
+  cannot use: the device spends from its offline allowance for that meter (set on the licence model; a
+  tenth of the meter by default, 0 for online only), never past what it last heard is left, and reports
+  the spend with its next check-in (`offline` is true in the result). Past either, `OfflineLimit`. A spend
+  the allowance would refuse asks the server first, whatever the last outage left behind, so a customer
+  who is back online is not refused for it (once a minute while KeyGrant stays out of reach); one the
+  allowance covers is not asked again for a minute after an outage, growing to an hour. The unsynced
+  spends are kept with the licence (`StoredState::spends`), so they survive a restart and a second
+  instance of the app, and a spend the SDK cannot save yet is kept in memory: the customer always gets the
+  use they were told they had, and it is reported once it has been saved (a spend in doubt, and the
+  take-back of one refused, are reported with the next request).
+- **It needs a key's lease** that licenses this build on this device (`NotLicensed` otherwise, without
+  asking). A device trial and an offline licence file have no meters.
+- **`deactivate()` clears the unsynced spends with the licence.** It sends them with the release, but
+  clears them locally even when KeyGrant could not be reached (`released` is then false), so what the
+  server did not hear is lost: at most the offline allowance of each meter.
+- **It never panics for an outcome**: every one is in the `UseResult`, and what no adapter can tell it (a
+  storage adapter or a clock that panicked) is `Storage`. A `use` request waits at most 5 seconds for the
+  server (less when `http_timeout` is shorter). The call blocks and takes no cancellation: it runs to
+  its bounded answer.
+- **`n` is a `u64`**: anything outside 1 to 1,000,000,000 is `InvalidAmount`, and a meter code that is not
+  1 to 32 UTF-16 units is `NoMeter`, both without asking anything. A code is matched exactly, case
+  included.
+- **`status.meters`** is there on a `Licensed` status from a key's lease that names meters, and empty on
+  every other status: `left` is net of this device's unsynced spends, `total` is what the key holds
+  (for good, or this period), `offline` is this device's allowance, `unsynced` what it has spent and not
+  reported, and `resets` is true for a meter that comes back each billing period.
+- **A meter never takes the licence away.** Nothing reads one to decide whether the app is licensed: a
+  meter that is used up refuses spends, never the app.
+- An app built with an SDK from before meters licenses a metered key as any other and cannot spend.
+
 ## Buying from the app
 
 Give a customer who holds no key a Buy button that opens your Stripe Payment
@@ -383,6 +456,7 @@ upgrades.
 | `import_license_file(content)` | Takes a licence file's content, verified offline: an offline file is stored and licenses the app with no network; a key file's key is activated as `activate` would. See [Licence files](#licence-files-drag-and-drop). |
 | `import_license_file_with(content, &options)` | `import_license_file`, passing `ActivateOptions` on to a key file's activation. |
 | `remove_license_file()` | Drops the stored offline licence file; a key the device holds keeps working. `Err(Error::Busy)` or `Err(Error::Storage(_))`. |
+| `use_meter(meter, n)` | Spends `n` uses of a meter the key's licence model counts, exact online and from an offline allowance with no answer. `UseResult { ok, left, offline, error }`. See [Metered uses](#metered-uses-counting-what-a-key-may-do). |
 | `upgrade_url(link)` | The payment link with this device's **activation id** (never the key) as `client_reference_id`, so an upgrade checkout extends the key the customer holds. `Ok(None)` without an activation. |
 
 ### Configuration
@@ -405,7 +479,7 @@ Each has a builder method of the same name (`.major(3)`, `.storage(...)`, ...).
 
 | `state` | `reason` | What to do |
 |---|---|---|
-| `Licensed` | | Run. `test` is true on a TEST licence (refuse those in a release build if you like). With `source: Some(LicenseSource::File)`, from a stored offline licence file: show `licensed_to`. |
+| `Licensed` | | Run. `test` is true on a TEST licence (refuse those in a release build if you like). `meters` holds the key's meters, when it has any. With `source: Some(LicenseSource::File)`, from a stored offline licence file: show `licensed_to`. |
 | `Trial` | | Run; `trial_days_left` and `trial_ends_at` say how long. A trial runs only while its signed trial lease is valid, to the end that lease was signed to: the end stored in the state file is unsigned, so editing it extends nothing. |
 | `Expired` | `Offline` | The lease ran out and the server could not be reached. Ask the customer to go online; `refresh()`. |
 | `Expired` | `Trial` | The trial has ended (or there is no valid trial lease to run it on): offer to buy. |
@@ -433,7 +507,10 @@ Offline-first. It asks the server (a validate) only:
    7 days left, or less than half its life if shorter). Bounded to 5 seconds;
    the valid lease is the answer when that gets no verdict;
 2. on a lease past its end or otherwise invalid here, to let the server heal it;
-3. on a stored refusal that still stands for this build.
+3. on a stored refusal that still stands for this build;
+4. on a valid lease, when the device holds spends KeyGrant has not heard of (the
+   journal of [metered uses](#metered-uses-counting-what-a-key-may-do)) and the
+   journal's own wait is not running.
 
 And it asks for the trial again (as `start_trial()` does, bounded to 5 seconds)
 when the trial's lease does not verify here while the stored end is still ahead:
@@ -653,7 +730,11 @@ the clock guard, the wire and the machine-id reads, and the groups after them
 `tests/conformance/later.rs`; the key sets, in `tests/conformance/keys.rs`;
 and the licence files, `license_file_token`, `verify_license_file`,
 `check_license_file` and `license_file_status`, in
-`tests/conformance/files.rs`). A
+`tests/conformance/files.rs`; and the metered-uses groups, answered in
+`tests/conformance/meters.rs`: the meters a lease signs, what a call asks for, the
+base figures, the status's meters, what a spend with no answer may be, when a
+call asks, what a use answer does, how the journal lands on the stored state,
+and what a request reports and an answer confirms). A
 status's entitlement numbers are compared as numbers, as the file says (`5` and
 `5.0` alike), and exactly: the `entitlementNumbers` group pins the bits each
 number written as the server writes it must read as, and the harness checks
@@ -665,6 +746,20 @@ another set (vectors just regenerated from the reference). The other suites
 drive the public API against fake adapters (a fake clock, in-memory storage and
 file system, a scripted server and fixed fingerprinters), with the time bounds
 shortened where a test waits them out.
+
+The behaviour tests cover metered uses beside it: online and with no answer, the
+waits, what is asked, a spend held in memory after a failed save, two
+processes over one state file, the allowance judged again where a spend lands,
+what a validate and a deactivate report and what clears the report, the
+journal's limits and its horizon. A property test (`tests/use_property.rs`) runs
+seeded random sequences of spends, check-ins, releases and restarts from two
+processes over one state file against a server that loses, delays and refuses
+answers (or loses them after recording the spend), a disk that refuses its
+writes and a clock that jumps, and holds the contract's invariants at every step
+and at the end. `PROPERTY_RUNS` and `PROPERTY_SEED` choose how many sequences run
+and from which seed (1500 from seed 1 by default); a case it finds is shrunk and
+printed as data, to be kept with the cases beside it. The signature crates are
+built optimised in the test profile, which verifies leases by the thousand.
 
 A lease's signature and payload must be canonical base64url (no padding, the
 URL-safe alphabet, no stray bits), as the reference requires; a trial lease
@@ -718,6 +813,28 @@ the reasons below.
   `panic = "abort"` the process ends.
 - `LicenseError` has no `not-configured`: the reference declares it and never
   produces it.
+- `use_meter(meter, n)` answers a `UseResult` struct (`ok`, `left`, `offline`,
+  `error`) where the reference's `use(meter, n)` answers one object: `left` is an
+  `Option<u64>` (none where the reference gives none), `offline` a flag, `error`
+  an `Option<UseError>`; it serialises as the reference's JSON. `use` is a Rust
+  keyword, and Rust has no default arguments, so `n` is always given and is a `u64`:
+  a fraction and a negative amount cannot be asked, and the vectors holding one are
+  skipped. The call blocks and takes no cancellation: it runs to its bounded answer,
+  as every call of this crate does.
+- `StoredState::spends` and `meter_figures` are typed lists and maps, read leniently
+  as the reference reads them: a journal that is not a list, an entry or a figure of
+  another shape, is read as empty or left out, and so are the unknown members of a
+  valid entry, when the state is read, so any save writes the state without them (the
+  reference keeps them until a journal change lands). The journal is the device's own,
+  never the server's word.
+- A spend's id is 16 bytes from the platform's secure random source
+  (`getrandom`), which is this crate's one dependency added for it.
+- A lease whose `met` holds a figure out of a double's range (`1e400`, which
+  JavaScript reads as infinity) is read here with that figure as the largest double,
+  which no figure holds either: its meter is dropped as the reference drops it, and
+  the lease stands, and so does a server answer holding one. (`serde_json` fails the
+  whole text on such a number; a lease's payload and an answer's body are read
+  through `lease::parse_json` instead.)
 
 **Better fit for the platform.**
 

@@ -134,6 +134,11 @@ mod files;
 #[path = "conformance/user_lock.rs"]
 mod user_lock;
 
+/// The metered-uses groups, after the user-lock groups, at the end of the file,
+/// answered in `conformance/meters.rs`.
+#[path = "conformance/meters.rs"]
+mod meters;
+
 /// Every group this harness answers, in the file's order.
 const GROUPS: [&str; 45] = [
     "leases",
@@ -310,7 +315,13 @@ fn the_harness_answers_every_group_in_the_file() {
         .filter(|(_, item)| item.is_array())
         .map(|(k, _)| k.as_str())
         .collect();
-    let answered: BTreeSet<&str> = GROUPS.iter().copied().chain(["conventions"]).collect();
+    // The metered-uses groups are answered in `conformance/meters.rs`.
+    let answered: BTreeSet<&str> = GROUPS
+        .iter()
+        .chain(meters::GROUPS.iter())
+        .copied()
+        .chain(["conventions"])
+        .collect();
     assert_eq!(in_file, answered);
 }
 
@@ -340,6 +351,12 @@ fn constants_are_the_references() {
         "TRIAL_REPORT_MS": TRIAL_REPORT_MS,
         "MAX_LICENSE_FILE_BYTES": keygrant::license_file::MAX_LICENSE_FILE_BYTES,
     });
+    // The metered-uses constants close the block, as their groups close the file.
+    let mut expected = expected;
+    expected
+        .as_object_mut()
+        .expect("an object")
+        .extend(meters::constants().as_object().expect("an object").clone());
     assert_eq!(*c, expected);
 }
 
@@ -556,6 +573,7 @@ fn base_claims() -> LeaseClaims {
         min_major: None,
         upgrade_until: None,
         ent: BTreeMap::new(),
+        met: None,
         iat: 1_789_913_600,
         exp: 1_792_505_600,
         grace: None,
