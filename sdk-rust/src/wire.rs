@@ -88,7 +88,7 @@ pub fn typed_for(email: Option<&str>, code: Option<&str>) -> Result<Typed, Licen
 /// (and it is not sent). The server compares it without regard to case, so
 /// it is sent as typed. One longer than [`MAX_EMAIL`] UTF-16 units after the
 /// trim can match no key's address.
-fn entered_email(email: Option<&str>) -> Result<Option<String>, LicenseError> {
+pub(crate) fn entered_email(email: Option<&str>) -> Result<Option<String>, LicenseError> {
     let entered = js_trim(email.unwrap_or_default());
     if entered.is_empty() {
         return Ok(None);
@@ -104,7 +104,7 @@ fn entered_email(email: Option<&str>) -> Result<Option<String>, LicenseError> {
 /// spaces (U+0020) dropped, since a code read off an email is typed as
 /// `123 456` as often as `123456`. None when it is blank; else exactly six
 /// ASCII digits, or `UserCodeInvalid`.
-fn entered_code(code: Option<&str>) -> Result<Option<String>, LicenseError> {
+pub(crate) fn entered_code(code: Option<&str>) -> Result<Option<String>, LicenseError> {
     let entered: String = js_trim(code.unwrap_or_default())
         .chars()
         .filter(|c| *c != ' ')

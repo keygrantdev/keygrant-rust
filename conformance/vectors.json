@@ -36,7 +36,11 @@
     "useOutcomes: response is the answer to a use request (null when there was none at all); askedAt is the device clock when it was asked. expect is {outcome: spent | used-up | no-meter | refused | unanswered, refusal?, left?, patch, figures, confirmed}: patch what is saved as the answer to the ask (null clears a field), figures the figures saved (code to {left, total, offline, resets, at}), confirmed the reports the answer names as recorded.",
     "journals: op is one change to the journal about the activation it names (about); expect is the journal and the figures after it, as {spends, meterFigures, refused}: refused is true for a spend the full journal could not take (64 entries), or that would take its meter's unsynced spends (the n of its offline and unanswered entries) past the op's limit. A void that finds MAX_PENDING_VOIDS voids already held (in the constants) takes the place of the oldest, and is not refused for it. An op with told, a spend the customer was told was made while a failed save kept it in memory, lands whatever the limit and the cap say. An empty journal is spends [] and no figures is {}.",
     "spendReports: expect is the report a body carries for the journal, oldest first with a void marked, at most 64 entries, or null for none.",
-    "spendConfirmations: expect is the reports an answer names as recorded, in order, read leniently: a member of another shape is left out. No answer at all, a 5xx and a 429 name none."
+    "spendConfirmations: expect is the reports an answer names as recorded, in order, read leniently: a member of another shape is left out. No answer at all, a 5xx and a 429 name none.",
+    "pickupAsks: email and code are what a person typed for pickUp; code null is pickUp(email), the ask for a code, and a code (a blank one included) is pickUp(email, code), a confirm. expect is {send: {email, code?}} or {refused: error}, the error the call answers at once. The address is entered as typedFor enters it: trimmed, a blank one invalid-email, as is one longer than 254 UTF-16 units after the trim. The code is entered as typedFor enters it, and a blank one or one that is not six ASCII digits is wrong-code. The address is judged first.",
+    "pickupRefusals: json is the body of a pickup call answered with anything but a 200 (null for none). expect is {error, retryAfter?}: pickup-disabled, wrong-code, code-expired, too-many-attempts and try-again as themselves, rate-limited as too-many-attempts, unavailable as try-again, invalid-request as invalid-email, and anything else (another word, a word not text, no body, a body not an object) as network. retryAfter is kept only on too-many-attempts and try-again, and only as a whole number from 0 to 2^53 - 1.",
+    "pickedKeys: json is the body of a confirm answered 200. expect is null when it is no pickup answer (not an object, or keys not an array), which pickUp answers as network; else the keys in order, a member left out unless it is an object whose key is text of 1 to MAX_KEY UTF-16 units. Each kept member: model and state texts (else empty), modelName a text or null, entitlements read as a lease ent is, expiresAt, deviceLimit and activeDevices whole numbers from 0 (else null, 0 and 0), versions null unless an object with a whole minMajor from 0 (then maxMajor and upgradeUntil each whole from 0, else null), held true only for JSON true, sale only with a text id and whole index and size of at least 1, activationCode only as exactly six ASCII digits; userLock and every other member are not read.",
+    "pickupChoices: keys are picked keys as read, major the build major (as majors gives it) and now the device clock in ms. expect is {index} of the key restoreByEmail activates, or {refused}. A key covers the build when its versions are null, or when minMajor <= major and (maxMajor is null, or major <= maxMajor, or upgradeUntil is after now). Of the keys that cover it: the first held, else the first with activeDevices < deviceLimit, else the first. No keys at all is no-key; keys none of which covers the build are upgrade when one has versions with minMajor <= major, else outdated."
   ],
   "publicJwk": {
     "kty": "OKP",
@@ -41324,6 +41328,1726 @@
         ]
       },
       "expect": []
+    }
+  ],
+  "pickupAsks": [
+    {
+      "email": "Mara@Studio.example",
+      "code": null,
+      "expect": {
+        "send": {
+          "email": "Mara@Studio.example"
+        }
+      }
+    },
+    {
+      "email": "  Mara@Studio.example\n",
+      "code": null,
+      "expect": {
+        "send": {
+          "email": "Mara@Studio.example"
+        }
+      }
+    },
+    {
+      "email": "﻿mara@studio.example\t",
+      "code": null,
+      "expect": {
+        "send": {
+          "email": "mara@studio.example"
+        }
+      }
+    },
+    {
+      "email": " mara@studio.example ",
+      "code": null,
+      "expect": {
+        "send": {
+          "email": "mara@studio.example"
+        }
+      }
+    },
+    {
+      "email": "",
+      "code": null,
+      "expect": {
+        "refused": "invalid-email"
+      }
+    },
+    {
+      "email": "   ",
+      "code": null,
+      "expect": {
+        "refused": "invalid-email"
+      }
+    },
+    {
+      "email": "　",
+      "code": null,
+      "expect": {
+        "refused": "invalid-email"
+      }
+    },
+    {
+      "email": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@studio.example",
+      "code": null,
+      "expect": {
+        "send": {
+          "email": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@studio.example"
+        }
+      }
+    },
+    {
+      "email": " aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@studio.example ",
+      "code": null,
+      "expect": {
+        "send": {
+          "email": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@studio.example"
+        }
+      }
+    },
+    {
+      "email": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@studio.example",
+      "code": null,
+      "expect": {
+        "refused": "invalid-email"
+      }
+    },
+    {
+      "email": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa😀",
+      "code": null,
+      "expect": {
+        "refused": "invalid-email"
+      }
+    },
+    {
+      "email": "Mara@Studio.example",
+      "code": "123456",
+      "expect": {
+        "send": {
+          "email": "Mara@Studio.example",
+          "code": "123456"
+        }
+      }
+    },
+    {
+      "email": "Mara@Studio.example",
+      "code": "000042",
+      "expect": {
+        "send": {
+          "email": "Mara@Studio.example",
+          "code": "000042"
+        }
+      }
+    },
+    {
+      "email": "Mara@Studio.example",
+      "code": " 123 456 ",
+      "expect": {
+        "send": {
+          "email": "Mara@Studio.example",
+          "code": "123456"
+        }
+      }
+    },
+    {
+      "email": "Mara@Studio.example",
+      "code": " 123456 ",
+      "expect": {
+        "send": {
+          "email": "Mara@Studio.example",
+          "code": "123456"
+        }
+      }
+    },
+    {
+      "email": "Mara@Studio.example",
+      "code": "",
+      "expect": {
+        "refused": "wrong-code"
+      }
+    },
+    {
+      "email": "Mara@Studio.example",
+      "code": "  ",
+      "expect": {
+        "refused": "wrong-code"
+      }
+    },
+    {
+      "email": "Mara@Studio.example",
+      "code": "12345",
+      "expect": {
+        "refused": "wrong-code"
+      }
+    },
+    {
+      "email": "Mara@Studio.example",
+      "code": "1234567",
+      "expect": {
+        "refused": "wrong-code"
+      }
+    },
+    {
+      "email": "Mara@Studio.example",
+      "code": "abcdef",
+      "expect": {
+        "refused": "wrong-code"
+      }
+    },
+    {
+      "email": "Mara@Studio.example",
+      "code": "１２３４５６",
+      "expect": {
+        "refused": "wrong-code"
+      }
+    },
+    {
+      "email": "Mara@Studio.example",
+      "code": "123-456",
+      "expect": {
+        "refused": "wrong-code"
+      }
+    },
+    {
+      "email": "Mara@Studio.example",
+      "code": "123\t456",
+      "expect": {
+        "refused": "wrong-code"
+      }
+    },
+    {
+      "email": "",
+      "code": "123456",
+      "expect": {
+        "refused": "invalid-email"
+      }
+    },
+    {
+      "email": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@studio.example",
+      "code": "nope",
+      "expect": {
+        "refused": "invalid-email"
+      }
+    }
+  ],
+  "pickupRefusals": [
+    {
+      "json": {
+        "error": "pickup-disabled"
+      },
+      "expect": {
+        "error": "pickup-disabled"
+      }
+    },
+    {
+      "json": {
+        "error": "wrong-code"
+      },
+      "expect": {
+        "error": "wrong-code"
+      }
+    },
+    {
+      "json": {
+        "error": "code-expired"
+      },
+      "expect": {
+        "error": "code-expired"
+      }
+    },
+    {
+      "json": {
+        "error": "too-many-attempts",
+        "retryAfter": 3600
+      },
+      "expect": {
+        "error": "too-many-attempts",
+        "retryAfter": 3600
+      }
+    },
+    {
+      "json": {
+        "error": "too-many-attempts"
+      },
+      "expect": {
+        "error": "too-many-attempts"
+      }
+    },
+    {
+      "json": {
+        "error": "try-again",
+        "retryAfter": 60
+      },
+      "expect": {
+        "error": "try-again",
+        "retryAfter": 60
+      }
+    },
+    {
+      "json": {
+        "error": "rate-limited",
+        "retryAfter": 120
+      },
+      "expect": {
+        "error": "too-many-attempts",
+        "retryAfter": 120
+      }
+    },
+    {
+      "json": {
+        "error": "unavailable",
+        "retryAfter": 60
+      },
+      "expect": {
+        "error": "try-again",
+        "retryAfter": 60
+      }
+    },
+    {
+      "json": {
+        "error": "invalid-request"
+      },
+      "expect": {
+        "error": "invalid-email"
+      }
+    },
+    {
+      "json": {
+        "error": "unknown-product"
+      },
+      "expect": {
+        "error": "network"
+      }
+    },
+    {
+      "json": {
+        "error": "limit"
+      },
+      "expect": {
+        "error": "network"
+      }
+    },
+    {
+      "json": {
+        "error": "Wrong-Code"
+      },
+      "expect": {
+        "error": "network"
+      }
+    },
+    {
+      "json": {
+        "error": "too_many_attempts"
+      },
+      "expect": {
+        "error": "network"
+      }
+    },
+    {
+      "json": {
+        "error": 7
+      },
+      "expect": {
+        "error": "network"
+      }
+    },
+    {
+      "json": {},
+      "expect": {
+        "error": "network"
+      }
+    },
+    {
+      "json": null,
+      "expect": {
+        "error": "network"
+      }
+    },
+    {
+      "json": "Bad gateway",
+      "expect": {
+        "error": "network"
+      }
+    },
+    {
+      "json": [],
+      "expect": {
+        "error": "network"
+      }
+    },
+    {
+      "json": {
+        "error": "wrong-code",
+        "retryAfter": 60
+      },
+      "expect": {
+        "error": "wrong-code"
+      }
+    },
+    {
+      "json": {
+        "error": "too-many-attempts",
+        "retryAfter": 0
+      },
+      "expect": {
+        "error": "too-many-attempts",
+        "retryAfter": 0
+      }
+    },
+    {
+      "json": {
+        "error": "too-many-attempts",
+        "retryAfter": 1.5
+      },
+      "expect": {
+        "error": "too-many-attempts"
+      }
+    },
+    {
+      "json": {
+        "error": "too-many-attempts",
+        "retryAfter": -1
+      },
+      "expect": {
+        "error": "too-many-attempts"
+      }
+    },
+    {
+      "json": {
+        "error": "too-many-attempts",
+        "retryAfter": "60"
+      },
+      "expect": {
+        "error": "too-many-attempts"
+      }
+    },
+    {
+      "json": {
+        "error": "rate-limited",
+        "retryAfter": null
+      },
+      "expect": {
+        "error": "too-many-attempts"
+      }
+    }
+  ],
+  "pickedKeys": [
+    {
+      "json": {
+        "keys": []
+      },
+      "expect": []
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+            "model": "subscription",
+            "modelName": "Household",
+            "state": "active",
+            "entitlements": {
+              "edition": "pro",
+              "seats": 5,
+              "beta": true
+            },
+            "expiresAt": 1800000000000,
+            "versions": {
+              "minMajor": 2,
+              "maxMajor": null,
+              "upgradeUntil": 1795000000000
+            },
+            "deviceLimit": 2,
+            "activeDevices": 1,
+            "held": true,
+            "sale": {
+              "id": "sale_1",
+              "index": 3,
+              "size": 6
+            },
+            "userLock": "code",
+            "activationCode": "012345"
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "subscription",
+          "modelName": "Household",
+          "state": "active",
+          "entitlements": {
+            "edition": "pro",
+            "seats": 5,
+            "beta": true
+          },
+          "expiresAt": 1800000000000,
+          "versions": {
+            "minMajor": 2,
+            "maxMajor": null,
+            "upgradeUntil": 1795000000000
+          },
+          "deviceLimit": 2,
+          "activeDevices": 1,
+          "held": true,
+          "sale": {
+            "id": "sale_1",
+            "index": 3,
+            "size": 6
+          },
+          "activationCode": "012345"
+        }
+      ]
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD"
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    },
+    {
+      "json": null,
+      "expect": null
+    },
+    {
+      "json": "ok",
+      "expect": null
+    },
+    {
+      "json": [],
+      "expect": null
+    },
+    {
+      "json": {},
+      "expect": null
+    },
+    {
+      "json": {
+        "keys": "many"
+      },
+      "expect": null
+    },
+    {
+      "json": {
+        "keys": null
+      },
+      "expect": null
+    },
+    {
+      "json": {
+        "ok": true
+      },
+      "expect": null
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": ""
+          },
+          {
+            "key": 7
+          },
+          "SLUICE-AAAA",
+          null,
+          [],
+          {
+            "model": "perpetual"
+          },
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD"
+          },
+          {
+            "key": "SLUICE-SECOND"
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        },
+        {
+          "key": "SLUICE-SECOND",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK"
+          },
+          {
+            "key": "KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK"
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+            "versions": null
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+            "versions": {
+              "minMajor": 2
+            }
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 2,
+            "maxMajor": null,
+            "upgradeUntil": null
+          },
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+            "versions": {
+              "minMajor": 1,
+              "maxMajor": 3,
+              "upgradeUntil": null
+            }
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 1,
+            "maxMajor": 3,
+            "upgradeUntil": null
+          },
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+            "versions": {
+              "minMajor": -1,
+              "maxMajor": 3
+            }
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+            "versions": {
+              "minMajor": 1.5
+            }
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+            "versions": "all"
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+            "versions": {
+              "minMajor": 1,
+              "maxMajor": "3",
+              "upgradeUntil": -5
+            }
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 1,
+            "maxMajor": null,
+            "upgradeUntil": null
+          },
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+            "held": "true"
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+            "held": 1
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+            "sale": {
+              "id": "sale_1",
+              "index": 0,
+              "size": 6
+            }
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+            "sale": {
+              "id": 9,
+              "index": 1,
+              "size": 6
+            }
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+            "sale": {
+              "id": "sale_1",
+              "index": 1
+            }
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+            "activationCode": "12345"
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+            "activationCode": 123456
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+            "activationCode": " 123456"
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+            "activationCode": "１２３４５６"
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+            "entitlements": {
+              "edition": "pro",
+              "nested": {
+                "a": 1
+              },
+              "list": [
+                1
+              ],
+              "none": null
+            }
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {
+            "edition": "pro"
+          },
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+            "entitlements": [
+              "pro"
+            ]
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+            "expiresAt": -5,
+            "deviceLimit": 2.5,
+            "activeDevices": -1
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+            "expiresAt": "1800000000000",
+            "deviceLimit": "3",
+            "activeDevices": null
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    },
+    {
+      "json": {
+        "keys": [
+          {
+            "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+            "model": 7,
+            "modelName": 7,
+            "state": null
+          }
+        ]
+      },
+      "expect": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "",
+          "modelName": null,
+          "state": "",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 0,
+          "activeDevices": 0,
+          "held": false
+        }
+      ]
+    }
+  ],
+  "pickupChoices": [
+    {
+      "keys": [],
+      "major": 1,
+      "now": 1790000000000,
+      "expect": {
+        "refused": "no-key"
+      }
+    },
+    {
+      "keys": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 1,
+            "maxMajor": 1,
+            "upgradeUntil": null
+          },
+          "deviceLimit": 1,
+          "activeDevices": 0,
+          "held": false
+        }
+      ],
+      "major": 1,
+      "now": 1790000000000,
+      "expect": {
+        "index": 0
+      }
+    },
+    {
+      "keys": [
+        {
+          "key": "A",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 1,
+            "maxMajor": 1,
+            "upgradeUntil": null
+          },
+          "deviceLimit": 1,
+          "activeDevices": 1,
+          "held": false
+        }
+      ],
+      "major": 1,
+      "now": 1790000000000,
+      "expect": {
+        "index": 0
+      }
+    },
+    {
+      "keys": [
+        {
+          "key": "A",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 1,
+            "maxMajor": 1,
+            "upgradeUntil": null
+          },
+          "deviceLimit": 1,
+          "activeDevices": 1,
+          "held": false
+        },
+        {
+          "key": "B",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 1,
+            "maxMajor": 1,
+            "upgradeUntil": null
+          },
+          "deviceLimit": 1,
+          "activeDevices": 0,
+          "held": false
+        },
+        {
+          "key": "C",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 1,
+            "maxMajor": 1,
+            "upgradeUntil": null
+          },
+          "deviceLimit": 1,
+          "activeDevices": 1,
+          "held": true
+        }
+      ],
+      "major": 1,
+      "now": 1790000000000,
+      "expect": {
+        "index": 2
+      }
+    },
+    {
+      "keys": [
+        {
+          "key": "A",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 1,
+            "maxMajor": 1,
+            "upgradeUntil": null
+          },
+          "deviceLimit": 1,
+          "activeDevices": 1,
+          "held": false
+        },
+        {
+          "key": "B",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 1,
+            "maxMajor": 1,
+            "upgradeUntil": null
+          },
+          "deviceLimit": 1,
+          "activeDevices": 1,
+          "held": false
+        },
+        {
+          "key": "C",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 1,
+            "maxMajor": 1,
+            "upgradeUntil": null
+          },
+          "deviceLimit": 1,
+          "activeDevices": 0,
+          "held": false
+        }
+      ],
+      "major": 1,
+      "now": 1790000000000,
+      "expect": {
+        "index": 2
+      }
+    },
+    {
+      "keys": [
+        {
+          "key": "A",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 1,
+            "maxMajor": 1,
+            "upgradeUntil": null
+          },
+          "deviceLimit": 1,
+          "activeDevices": 1,
+          "held": false
+        },
+        {
+          "key": "B",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 1,
+            "maxMajor": 1,
+            "upgradeUntil": null
+          },
+          "deviceLimit": 1,
+          "activeDevices": 1,
+          "held": false
+        }
+      ],
+      "major": 1,
+      "now": 1790000000000,
+      "expect": {
+        "index": 0
+      }
+    },
+    {
+      "keys": [
+        {
+          "key": "A",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 1,
+            "maxMajor": 1,
+            "upgradeUntil": null
+          },
+          "deviceLimit": 1,
+          "activeDevices": 1,
+          "held": true
+        },
+        {
+          "key": "B",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 2,
+            "maxMajor": 2,
+            "upgradeUntil": null
+          },
+          "deviceLimit": 1,
+          "activeDevices": 0,
+          "held": false
+        }
+      ],
+      "major": 2,
+      "now": 1790000000000,
+      "expect": {
+        "index": 1
+      }
+    },
+    {
+      "keys": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 2,
+            "maxMajor": 3,
+            "upgradeUntil": null
+          },
+          "deviceLimit": 1,
+          "activeDevices": 0,
+          "held": false
+        }
+      ],
+      "major": 2,
+      "now": 1790000000000,
+      "expect": {
+        "index": 0
+      }
+    },
+    {
+      "keys": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 2,
+            "maxMajor": 3,
+            "upgradeUntil": null
+          },
+          "deviceLimit": 1,
+          "activeDevices": 0,
+          "held": false
+        }
+      ],
+      "major": 3,
+      "now": 1790000000000,
+      "expect": {
+        "index": 0
+      }
+    },
+    {
+      "keys": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 2,
+            "maxMajor": null,
+            "upgradeUntil": null
+          },
+          "deviceLimit": 1,
+          "activeDevices": 0,
+          "held": false
+        }
+      ],
+      "major": 40,
+      "now": 1790000000000,
+      "expect": {
+        "index": 0
+      }
+    },
+    {
+      "keys": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 1,
+            "maxMajor": 1,
+            "upgradeUntil": 1790000000001
+          },
+          "deviceLimit": 1,
+          "activeDevices": 0,
+          "held": false
+        }
+      ],
+      "major": 5,
+      "now": 1790000000000,
+      "expect": {
+        "index": 0
+      }
+    },
+    {
+      "keys": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 1,
+            "maxMajor": 1,
+            "upgradeUntil": 1790000000000
+          },
+          "deviceLimit": 1,
+          "activeDevices": 0,
+          "held": false
+        }
+      ],
+      "major": 5,
+      "now": 1790000000000,
+      "expect": {
+        "refused": "upgrade"
+      }
+    },
+    {
+      "keys": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 1,
+          "activeDevices": 0,
+          "held": false
+        }
+      ],
+      "major": 7,
+      "now": 1790000000000,
+      "expect": {
+        "index": 0
+      }
+    },
+    {
+      "keys": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 1,
+            "maxMajor": 1,
+            "upgradeUntil": null
+          },
+          "deviceLimit": 1,
+          "activeDevices": 0,
+          "held": false
+        },
+        {
+          "key": "B",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": null,
+          "deviceLimit": 1,
+          "activeDevices": 0,
+          "held": false
+        }
+      ],
+      "major": 3,
+      "now": 1790000000000,
+      "expect": {
+        "index": 1
+      }
+    },
+    {
+      "keys": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 1,
+            "maxMajor": 1,
+            "upgradeUntil": null
+          },
+          "deviceLimit": 1,
+          "activeDevices": 0,
+          "held": false
+        }
+      ],
+      "major": 2,
+      "now": 1790000000000,
+      "expect": {
+        "refused": "upgrade"
+      }
+    },
+    {
+      "keys": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 3,
+            "maxMajor": null,
+            "upgradeUntil": null
+          },
+          "deviceLimit": 1,
+          "activeDevices": 0,
+          "held": false
+        }
+      ],
+      "major": 2,
+      "now": 1790000000000,
+      "expect": {
+        "refused": "outdated"
+      }
+    },
+    {
+      "keys": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 3,
+            "maxMajor": 4,
+            "upgradeUntil": null
+          },
+          "deviceLimit": 1,
+          "activeDevices": 0,
+          "held": false
+        },
+        {
+          "key": "B",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 1,
+            "maxMajor": 1,
+            "upgradeUntil": null
+          },
+          "deviceLimit": 1,
+          "activeDevices": 0,
+          "held": false
+        }
+      ],
+      "major": 2,
+      "now": 1790000000000,
+      "expect": {
+        "refused": "upgrade"
+      }
+    },
+    {
+      "keys": [
+        {
+          "key": "SLUICE-AAAA-BBBB-CCCC-DDDD",
+          "model": "perpetual",
+          "modelName": null,
+          "state": "active",
+          "entitlements": {},
+          "expiresAt": null,
+          "versions": {
+            "minMajor": 2,
+            "maxMajor": 2,
+            "upgradeUntil": 1789999999999
+          },
+          "deviceLimit": 1,
+          "activeDevices": 0,
+          "held": false
+        }
+      ],
+      "major": 1,
+      "now": 1790000000000,
+      "expect": {
+        "refused": "outdated"
+      }
     }
   ]
 }

@@ -52,6 +52,8 @@ pub mod machine_id;
 pub mod meters;
 #[doc(hidden)]
 pub mod offline;
+#[doc(hidden)]
+pub mod pickup;
 mod registry;
 #[doc(hidden)]
 pub mod renewal;
@@ -89,6 +91,7 @@ pub use meters::{
     BaseFigure, MeterFigure, MeterStatus, SpendEntry, SpendKind, UseError, UseResult,
     MAX_METER_USES,
 };
+pub use pickup::{PickedKey, PickedSale, PickedVersions, PickupError, PickupRefusal, RestoreError};
 #[cfg(windows)]
 pub use registry::WindowsRegistryStash;
 #[doc(hidden)]

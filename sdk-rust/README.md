@@ -28,7 +28,7 @@ The full guide is at https://keygrant.dev/docs.
 
 ```toml
 [dependencies]
-keygrant = "0.7"
+keygrant = "0.8"
 ```
 
 or `cargo add keygrant`.
@@ -426,6 +426,71 @@ async fn export_spend(license: tauri::State<'_, Arc<License>>) -> Result<UseResu
   meter that is used up refuses spends, never the app.
 - An app built with an SDK from before meters licenses a metered key as any other and cannot spend.
 
+## Restoring a licence without the key (App Store builds)
+
+A build that may not take a typed licence key (an App Store build) restores a
+web buyer's licence by the address the key was sold to. The product's **Key
+pickup** must be on. The app asks for a code, the customer types the code that
+comes to that address, and the SDK activates the key that fits this build:
+
+```rust
+// 1. Mail a code to the address the key was sold to (the answer is the same
+//    whether or not the address holds a key).
+license.pick_up(&entered_email)?;
+
+// 2. The customer types the code; restore.
+match license.restore_by_email(&entered_email, &entered_code) {
+    Ok(()) => { /* licensed: read status() */ }
+    Err(error) => match error.code() {
+        "wrong-code" => { /* ask again */ }
+        "code-expired" => { /* license.pick_up(&entered_email) for a new code */ }
+        "too-many-attempts" | "try-again" => { /* wait error.retry_after() seconds */ }
+        "no-key" => { /* no key under that address */ }
+        "upgrade" | "outdated" => { /* buy an upgrade / update the app */ }
+        _ => {}
+    },
+}
+```
+
+`pick_up_with_code(email, code)` hands back the address's keys instead
+(`Vec<PickedKey>`: show them by `model_name`, never the key) for an app that lets
+the customer choose; activate one with
+`activate_with(&picked.key, &ActivateOptions::new().email(&email).code(code))`,
+where `code` is the picked key's `activation_code` when it has one.
+`restore_by_email` chooses for the customer, among the keys that cover this
+build's major: the key this device already holds a seat on, else one with a
+free seat, else the first.
+
+| Error (its word) | Means | The app |
+|---|---|---|
+| `InvalidEmail` (`invalid-email`) | the address is blank or longer than any | ask again |
+| `WrongCode` (`wrong-code`) | not six digits, or not the address's live code | ask again |
+| `CodeExpired` (`code-expired`) | no live code (expired after 10 minutes, used, burnt by its fifth wrong try, or never asked for) | `pick_up` again |
+| `TooManyAttempts` (`too-many-attempts`) | thirty wrong codes for the address this hour, or too many asks or confirms from this network | wait `retry_after` |
+| `PickupDisabled` (`pickup-disabled`) | the product's Key pickup is off | offer another way (support) |
+| `TryAgain` (`try-again`) | a count could not be made | retry |
+| `Network` (`network`) | no answer, or an answer that is not a pickup's | retry |
+
+`restore_by_email` also answers `no-key` (the address holds no key of the
+product), `upgrade` (the keys are for an older major than this build) and
+`outdated` (their lowest version is newer), activating nothing; then
+`activate`'s own errors (`limit`, `revoked`, ...) as they come, in a
+`RestoreError`. The address and the code are prepared as an activation's are
+(trimmed, a code's spaces dropped) and refused at once, asking nothing, when the
+address is blank or the code is not six digits, so a mistyped code costs the
+address none of its wrong tries. `retry_after` is read from the server's
+answer. The first confirm spends the code, so the keys it answered are kept in memory
+for 10 minutes (a code's life) by the address and code as sent: a confirm or a
+restore with the same pair answers from them and asks nothing, so a restore
+whose activation got no answer can be retried with the same code, and a restore
+after `pick_up_with_code` needs no new one. A restore that activates drops them.
+Nothing about a pickup is stored (not the address, the code, the keys or
+a refusal): the two `pick_up` calls write nothing and run beside any call, and
+`restore_by_email` stores only the activation, as `activate` does, and runs one
+at a time with it. A pickup never takes a licence away. The rules are in the SDK
+contract's section on key pickup, which the conformance vectors `pickupAsks`,
+`pickupRefusals`, `pickedKeys` and `pickupChoices` hold this crate to.
+
 ## Buying from the app
 
 Give a customer who holds no key a Buy button that opens your Stripe Payment
@@ -457,6 +522,9 @@ upgrades.
 | `import_license_file_with(content, &options)` | `import_license_file`, passing `ActivateOptions` on to a key file's activation. |
 | `remove_license_file()` | Drops the stored offline licence file; a key the device holds keeps working. `Err(Error::Busy)` or `Err(Error::Storage(_))`. |
 | `use_meter(meter, n)` | Spends `n` uses of a meter the key's licence model counts, exact online and from an offline allowance with no answer. `UseResult { ok, left, offline, error }`. See [Metered uses](#metered-uses-counting-what-a-key-may-do). |
+| `pick_up(email)` | Mails a code to the address a key was sold to, for a build that may not take a typed key. `Ok(())` or a `PickupRefusal`. See [Restoring a licence without the key](#restoring-a-licence-without-the-key-app-store-builds). |
+| `pick_up_with_code(email, code)` | The address's keys of the product for the code (`Vec<PickedKey>`), each marked `held` when this device holds a seat on it. Stores nothing. |
+| `restore_by_email(email, code)` | `pick_up_with_code`, then activates the key that fits this build, as `activate_with` would. `Ok(())` or a `RestoreError`. |
 | `upgrade_url(link)` | The payment link with this device's **activation id** (never the key) as `client_reference_id`, so an upgrade checkout extends the key the customer holds. `Ok(None)` without an activation. |
 
 ### Configuration
@@ -734,7 +802,9 @@ and the licence files, `license_file_token`, `verify_license_file`,
 `tests/conformance/meters.rs`: the meters a lease signs, what a call asks for, the
 base figures, the status's meters, what a spend with no answer may be, when a
 call asks, what a use answer does, how the journal lands on the stored state,
-and what a request reports and an answer confirms). A
+and what a request reports and an answer confirms; and the key-pickup groups, which close the file,
+in `tests/conformance/pickup.rs`: what a pickup sends for what a person typed, the error of each
+refusal, the keys a confirm hands back as read, and the key a restore activates). A
 status's entitlement numbers are compared as numbers, as the file says (`5` and
 `5.0` alike), and exactly: the `entitlementNumbers` group pins the bits each
 number written as the server writes it must read as, and the harness checks
@@ -747,7 +817,10 @@ drive the public API against fake adapters (a fake clock, in-memory storage and
 file system, a scripted server and fixed fingerprinters), with the time bounds
 shortened where a test waits them out.
 
-The behaviour tests cover metered uses beside it: online and with no answer, the
+The behaviour tests cover key pickup (`tests/pickup.rs`: the requests, every refusal, nothing
+written by `pick_up`, a restore's activation with the address and the activation code, `no-key`,
+`upgrade` and `outdated`, a refusal passed through, a pickup behind an unfinished call) and
+metered uses beside it: online and with no answer, the
 waits, what is asked, a spend held in memory after a failed save, two
 processes over one state file, the allowance judged again where a spend lands,
 what a validate and a deactivate report and what clears the report, the
@@ -786,7 +859,10 @@ the reasons below.
   this crate keeps `activate(key)` and `import_license_file(content)` and adds
   `activate_with(key, &options)` and `import_license_file_with(content, &options)`,
   with `ActivateOptions` for the object. The reference also reads a code kept
-  as a number; here a code is text, as in every typed port.
+  as a number; here a code is text, as in every typed port. Likewise
+  `pickUp(email)` and `pickUp(email, code)` are `pick_up(email)` and
+  `pick_up_with_code(email, code)`, and a pickup's refusal is a `PickupRefusal`
+  (the error and `retry_after`) where the reference resolves `{ ok: false, error }`.
 - A running trial's launch report is sent on a thread of its own (the
   reference sends it as a promise it never awaits). The thread shares the
   `License`'s adapters, all `Send + Sync`; a test waits for it through a

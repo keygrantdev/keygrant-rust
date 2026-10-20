@@ -134,10 +134,15 @@ mod files;
 #[path = "conformance/user_lock.rs"]
 mod user_lock;
 
-/// The metered-uses groups, after the user-lock groups, at the end of the file,
-/// answered in `conformance/meters.rs`.
+/// The metered-uses groups, after the user-lock groups, answered in
+/// `conformance/meters.rs`.
 #[path = "conformance/meters.rs"]
 mod meters;
+
+/// The key-pickup groups, after the metered-uses groups, at the end of the file,
+/// answered in `conformance/pickup.rs`.
+#[path = "conformance/pickup.rs"]
+mod pickup;
 
 /// Every group this harness answers, in the file's order.
 const GROUPS: [&str; 45] = [
@@ -315,10 +320,11 @@ fn the_harness_answers_every_group_in_the_file() {
         .filter(|(_, item)| item.is_array())
         .map(|(k, _)| k.as_str())
         .collect();
-    // The metered-uses groups are answered in `conformance/meters.rs`.
+    // The metered-uses and key-pickup groups are answered in their own modules.
     let answered: BTreeSet<&str> = GROUPS
         .iter()
         .chain(meters::GROUPS.iter())
+        .chain(pickup::GROUPS.iter())
         .copied()
         .chain(["conventions"])
         .collect();

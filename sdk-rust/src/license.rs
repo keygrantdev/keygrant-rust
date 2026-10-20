@@ -8,6 +8,7 @@ mod activation;
 mod files;
 mod meters;
 mod options;
+mod pickup;
 mod status_flow;
 
 pub use files::ImportedLicenseFile;
@@ -18,6 +19,7 @@ use crate::engine::Engine;
 use crate::error::{ActivateError, ActivateResult, ConfigError, Error, MissingEntitlement};
 use crate::lease::grants;
 use crate::offline::Basis;
+use crate::pickup::KeptKeys;
 use crate::state::{present, Patch};
 use crate::status::{DeactivateResult, LicenseError, LicenseReason, LicenseState, LicenseStatus};
 use crate::url::referenced_link;
@@ -57,6 +59,8 @@ pub struct License {
     pub(crate) unsaved_trial: Mutex<Option<(Patch, Basis)>>,
     /// The launch report in flight, if any (`launch.rs`), which no call waits on.
     pub(crate) launch_report: Mutex<Option<JoinHandle<()>>>,
+    /// The keys the last pickup confirm answered, in memory only (`pickup.rs`).
+    pub(crate) pickup_keys: Mutex<Option<KeptKeys>>,
 }
 
 impl fmt::Debug for License {
@@ -101,6 +105,7 @@ impl License {
             device_name,
             unsaved_trial: Mutex::new(None),
             launch_report: Mutex::new(None),
+            pickup_keys: Mutex::new(None),
         })
     }
 
