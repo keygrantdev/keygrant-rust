@@ -147,7 +147,9 @@ impl License {
     /// a checkout for an upgrade offer finds their key through the activation
     /// and extends it rather than minting a second one. The activation id,
     /// never the licence key: a URL lands in browser history and logs, and the
-    /// activation id grants nothing on its own. Read-only: runs beside any call.
+    /// activation id grants nothing on its own. Selling through Paddle, the link
+    /// is the tenant's own checkout page, which gives `client_reference_id` to
+    /// Paddle.js as custom data under the same name. Read-only: runs beside any call.
     pub fn upgrade_url(&self, payment_link_url: &str) -> Result<Option<String>, Error> {
         let state = self.engine.load(true).map_err(Error::Storage)?;
         let (Some(_), Some(activation_id)) = (present(&state.key), present(&state.activation_id))

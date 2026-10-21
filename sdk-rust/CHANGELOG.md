@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.1
+
+- Documentation only, no code change: selling through Paddle, the upgrade link is your own checkout page,
+  which reads `client_reference_id` from its address and gives it to Paddle.js as custom data under the
+  same name. The README says how.
+
 ## 0.8.0
 
 - Key pickup, for a build that may not take a typed licence key (an App Store build): a web buyer restores

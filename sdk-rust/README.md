@@ -525,7 +525,7 @@ upgrades.
 | `pick_up(email)` | Mails a code to the address a key was sold to, for a build that may not take a typed key. `Ok(())` or a `PickupRefusal`. See [Restoring a licence without the key](#restoring-a-licence-without-the-key-app-store-builds). |
 | `pick_up_with_code(email, code)` | The address's keys of the product for the code (`Vec<PickedKey>`), each marked `held` when this device holds a seat on it. Stores nothing. |
 | `restore_by_email(email, code)` | `pick_up_with_code`, then activates the key that fits this build, as `activate_with` would. `Ok(())` or a `RestoreError`. |
-| `upgrade_url(link)` | The payment link with this device's **activation id** (never the key) as `client_reference_id`, so an upgrade checkout extends the key the customer holds. `Ok(None)` without an activation. |
+| `upgrade_url(link)` | The payment link with this device's **activation id** (never the key) as `client_reference_id`, so an upgrade checkout extends the key the customer holds. `Ok(None)` without an activation. With Paddle, `link` is your own checkout page, which gives `client_reference_id` to Paddle.js as custom data. |
 
 ### Configuration
 
