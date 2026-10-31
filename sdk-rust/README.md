@@ -28,7 +28,7 @@ The full guide is at https://keygrant.dev/docs.
 
 ```toml
 [dependencies]
-keygrant = "0.8"
+keygrant = "1"
 ```
 
 or `cargo add keygrant`.

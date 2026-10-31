@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0
+
+- The first stable release. Nothing changed since 0.8.1 but the version number.
+
 ## 0.8.1
 
 - Documentation only, no code change: selling through Paddle, the upgrade link is your own checkout page,
